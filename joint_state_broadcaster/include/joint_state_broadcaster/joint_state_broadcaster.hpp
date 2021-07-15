@@ -37,12 +37,15 @@ using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface
  * Joint State Broadcasters publishes state interfaces from ros2_control as ROS messages.
  * There is a possibility to publish all available states (typical use), or only specific ones.
  * The latter is, for example, used when hardware provides multiple measurement source for some
- * of its states, e.g., position.
- * If "joints" or "interfaces" parameter is empty, all available states are published.
+ * of its states, e.g., position. Mapping of interfaces parameter enables to map the measurements
+ * from different sources stored in custom interfaces to standard dynamic names in JointState
+ * message. If "joints" or "interfaces" parameter is empty, all available states are published.
  *
  * \param use_local_topics Flag to publish topics in local namespace.
  * \param joints Names of the joints to control.
  * \param interfaces Name of the interface to command.
+ * \param map_interface_to_joint_state.{HW_IF_POSITION|HW_IF_VELOCITY|HW_IF_EFFORT} mapping
+ * between custom interface names and standard names in sensor_msgs::msg::JointState message.
  *
  * Publishes to:
  * - \b joint_states (sensor_msgs::msg::JointState): Joint states related to movement
@@ -89,6 +92,7 @@ protected:
   bool use_local_topics_;
   std::vector<std::string> joints_;
   std::vector<std::string> interfaces_;
+  std::unordered_map<std::string, std::string> map_interface_to_joint_state_;
 
   //  For the JointState message,
   //  we store the name of joints with compatible interfaces
