@@ -178,6 +178,11 @@ Trajectory::sample(
   expected_state = (*start_segment_itr);
 
   // TODO: Add and test enforceJointLimits? Unsure if needed for end of animation
+  // Yes, call enforceJointLimits to handle halting in servo, which has time_from_start == 1ns (does not enforce vel/acc limits)
+  if(last_idx == 0) {
+    // Enforce limits from current state, not the trajectory's single point, because the point from servo halting violates limits
+    enforceJointLimits(joint_limits, state_before_traj_msg_, (sample_time - time_before_traj_msg_).seconds(), expected_state);
+  }
 
   // the trajectories in msg may have empty velocities/accelerations, so resize them
   if (expected_state.velocities.empty()) {
