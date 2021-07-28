@@ -69,13 +69,13 @@ public:
 
   bool update_robot_state(const trajectory_msgs::msg::JointTrajectoryPoint & current_joint_state)
   {
-    if (current_joint_state.positions.size() != kinematic_state_->getVariableNames().size())
+    if (current_joint_state.positions.size() != joint_model_group_->getVariableNames().size())
     {
       RCLCPP_ERROR(node_->get_logger(), "Vector size mismatch in update_robot_state()");
       return false;
     }
 
-    kinematic_state_->setVariablePositions(current_joint_state.positions);
+    kinematic_state_->setJointGroupPositions(joint_model_group_, current_joint_state.positions);
     return true;
   }
 
