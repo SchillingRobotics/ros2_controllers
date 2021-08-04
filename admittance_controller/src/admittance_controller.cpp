@@ -547,6 +547,12 @@ controller_interface::return_type AdmittanceController::update()
 
   auto duration_since_last_call = get_node()->now() - previous_time_;
 
+  RCLCPP_WARN_STREAM_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(), ROS_LOG_THROTTLE_PERIOD, "duration_since_last_call: " << duration_since_last_call.nanoseconds());
+  if(duration_since_last_call.nanoseconds() < 1000) {
+    RCLCPP_ERROR_STREAM(get_node()->get_logger(), "duration_since_last_call: " << duration_since_last_call.nanoseconds());
+  }
+
+
   // TODO(destogl): Enable this when unified mode is used
 //   if (admittance_->unified_mode_) {
   //     admittance_->update(current_joint_states, ft_values, **input_pose_cmd, **input_wrench_cmd, duration_since_last_call, desired_joint_states);

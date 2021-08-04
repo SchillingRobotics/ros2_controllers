@@ -80,6 +80,13 @@ public:
   }
 
 private:
+  /** \brief Possibly calculate a velocity scaling factor, due to proximity of
+   * singularity and direction of motion
+   */
+  double velocityScalingFactorForSingularity(const Eigen::VectorXd& commanded_velocity,
+                                             const Eigen::JacobiSVD<Eigen::MatrixXd>& svd,
+                                             const Eigen::MatrixXd& pseudo_inverse);
+
   // MoveIt setup
   const moveit::core::JointModelGroup* joint_model_group_;
   moveit::core::RobotStatePtr kinematic_state_;
@@ -87,7 +94,6 @@ private:
 
   // Pre-allocate for speed
   Eigen::MatrixXd jacobian_;
-  Eigen::JacobiSVD<Eigen::MatrixXd> svd_;
   Eigen::MatrixXd matrix_s_;
   Eigen::MatrixXd pseudo_inverse_;
 };

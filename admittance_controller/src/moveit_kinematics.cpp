@@ -18,6 +18,11 @@
 
 #include "tf2_eigen/tf2_eigen.h"
 
+constexpr auto ROS_LOG_THROTTLE_PERIOD = std::chrono::milliseconds(3000).count();
+// TODO: Parameterize singularity thresholds
+constexpr double LOWER_SINGULARITY_THRESHOLD = 200.;
+constexpr double HARD_STOP_SINGULARITY_THRESHOLD = 500.;
+
 namespace admittance_controller
 {
 MoveItKinematics::MoveItKinematics(const std::shared_ptr<rclcpp::Node> & node, const std::string & group_name) : node_(node)
@@ -75,11 +80,12 @@ bool MoveItKinematics::convert_cartesian_deltas_to_joint_deltas(
   // Multiply with the pseudoinverse to get delta_theta
   jacobian_ = kinematic_state_->getJacobian(joint_model_group_);
   // TODO(andyz): consider what Olivier suggested: https://github.com/ros-controls/ros2_controllers/pull/173#discussion_r627936628
-  svd_ = Eigen::JacobiSVD<Eigen::MatrixXd>(jacobian_, Eigen::ComputeThinU | Eigen::ComputeThinV);
-  matrix_s_ = svd_.singularValues().asDiagonal();
-  pseudo_inverse_ = svd_.matrixV() * matrix_s_.inverse() * svd_.matrixU().transpose();
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd = Eigen::JacobiSVD<Eigen::MatrixXd>(jacobian_, Eigen::ComputeThinU | Eigen::ComputeThinV);
+  matrix_s_ = svd.singularValues().asDiagonal();
+  pseudo_inverse_ = svd.matrixV() * matrix_s_.inverse() * svd.matrixU().transpose();
 
   Eigen::VectorXd  delta_theta = pseudo_inverse_ * delta_x;
+  delta_theta *= velocityScalingFactorForSingularity(delta_x, svd, pseudo_inverse_);
 
   std::vector<double> delta_theta_v(&delta_theta[0], delta_theta.data() + delta_theta.cols() * delta_theta.rows());
   delta_theta_vec = delta_theta_v;
@@ -143,6 +149,78 @@ Eigen::Isometry3d MoveItKinematics::get_link_transform(
   update_robot_state(joint_state);
 
   return kinematic_state_->getGlobalLinkTransform(link_name);
+}
+
+// Possibly calculate a velocity scaling factor, due to proximity of singularity and direction of motion
+double MoveItKinematics::velocityScalingFactorForSingularity(const Eigen::VectorXd& commanded_velocity,
+                                                       const Eigen::JacobiSVD<Eigen::MatrixXd>& svd,
+                                                       const Eigen::MatrixXd& pseudo_inverse)
+{
+  double velocity_scale = 1;
+  std::size_t num_dimensions = commanded_velocity.size();
+
+  // Find the direction away from nearest singularity.
+  // The last column of U from the SVD of the Jacobian points directly toward or away from the singularity.
+  // The sign can flip at any time, so we have to do some extra checking.
+  // Look ahead to see if the Jacobian's condition will decrease.
+  Eigen::VectorXd vector_toward_singularity = svd.matrixU().col(num_dimensions - 1);
+
+  double ini_condition = svd.singularValues()(0) / svd.singularValues()(svd.singularValues().size() - 1);
+
+  // TODO: Remove or switch to DEBUG
+  RCLCPP_INFO_STREAM_THROTTLE(node_->get_logger(), *node_->get_clock(), 50000., "Singularity condition number is " << ini_condition);
+
+  // This singular vector tends to flip direction unpredictably. See R. Bro,
+  // "Resolving the Sign Ambiguity in the Singular Value Decomposition".
+  // Look ahead to see if the Jacobian's condition will decrease in this
+  // direction. Start with a scaled version of the singular vector
+  Eigen::VectorXd delta_x(num_dimensions);
+  double scale = 100;
+  delta_x = vector_toward_singularity / scale;
+
+  // Calculate a small change in joints
+  Eigen::VectorXd new_theta;
+  kinematic_state_->copyJointGroupPositions(joint_model_group_, new_theta);
+  new_theta += pseudo_inverse * delta_x;
+  kinematic_state_->setJointGroupPositions(joint_model_group_, new_theta);
+  Eigen::MatrixXd new_jacobian = kinematic_state_->getJacobian(joint_model_group_);
+
+  Eigen::JacobiSVD<Eigen::MatrixXd> new_svd(new_jacobian);
+  double new_condition = new_svd.singularValues()(0) / new_svd.singularValues()(new_svd.singularValues().size() - 1);
+  // If new_condition < ini_condition, the singular vector does point towards a
+  // singularity. Otherwise, flip its direction.
+  if (ini_condition >= new_condition)
+  {
+    vector_toward_singularity *= -1;
+  }
+
+  // If this dot product is positive, we're moving toward singularity ==> decelerate
+  double dot = vector_toward_singularity.dot(commanded_velocity);
+  if (dot > 0)
+  {
+    // Ramp velocity down linearly when the Jacobian condition is between lower_singularity_threshold and
+    // hard_stop_singularity_threshold, and we're moving towards the singularity
+    // TODO: Parameterize
+    if ((ini_condition > LOWER_SINGULARITY_THRESHOLD) &&
+        (ini_condition < HARD_STOP_SINGULARITY_THRESHOLD))
+    {
+      velocity_scale =
+          1. - (ini_condition - LOWER_SINGULARITY_THRESHOLD) /
+                   (HARD_STOP_SINGULARITY_THRESHOLD - LOWER_SINGULARITY_THRESHOLD);
+      // status_ = StatusCode::DECELERATE_FOR_SINGULARITY;
+      RCLCPP_WARN_STREAM_THROTTLE(node_->get_logger(), *node_->get_clock(), ROS_LOG_THROTTLE_PERIOD, "Close to a singularity, decelerating");
+    }
+
+    // Very close to singularity, so halt.
+    else if (ini_condition > HARD_STOP_SINGULARITY_THRESHOLD)
+    {
+      velocity_scale = 0;
+      // status_ = StatusCode::HALT_FOR_SINGULARITY;
+      RCLCPP_WARN_STREAM_THROTTLE(node_->get_logger(), *node_->get_clock(), ROS_LOG_THROTTLE_PERIOD, "Very close to a singularity, emergency stop");
+    }
+  }
+
+  return velocity_scale;
 }
 
 }  // namespace admittance_controller
