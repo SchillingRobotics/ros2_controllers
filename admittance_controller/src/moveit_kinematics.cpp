@@ -20,8 +20,8 @@
 
 constexpr auto ROS_LOG_THROTTLE_PERIOD = std::chrono::milliseconds(3000).count();
 // TODO: Parameterize singularity thresholds
-constexpr double LOWER_SINGULARITY_THRESHOLD = 200.;
-constexpr double HARD_STOP_SINGULARITY_THRESHOLD = 500.;
+constexpr double LOWER_SINGULARITY_THRESHOLD = 20.; //17.;
+constexpr double HARD_STOP_SINGULARITY_THRESHOLD = 60.; //30.;
 
 namespace admittance_controller
 {
@@ -194,10 +194,10 @@ double MoveItKinematics::velocityScalingFactorForSingularity(const Eigen::Vector
     vector_toward_singularity *= -1;
   }
 
-  // If this dot product is positive, we're moving toward singularity ==> decelerate
-  double dot = vector_toward_singularity.dot(commanded_velocity);
-  if (dot > 0)
-  {
+  // // If this dot product is positive, we're moving toward singularity ==> decelerate
+  // double dot = vector_toward_singularity.dot(commanded_velocity);
+  // if (dot > 0)
+  // {
     // Ramp velocity down linearly when the Jacobian condition is between lower_singularity_threshold and
     // hard_stop_singularity_threshold, and we're moving towards the singularity
     // TODO: Parameterize
@@ -218,7 +218,7 @@ double MoveItKinematics::velocityScalingFactorForSingularity(const Eigen::Vector
       // status_ = StatusCode::HALT_FOR_SINGULARITY;
       RCLCPP_WARN_STREAM_THROTTLE(node_->get_logger(), *node_->get_clock(), ROS_LOG_THROTTLE_PERIOD, "Very close to a singularity, emergency stop");
     }
-  }
+  // }
 
   return velocity_scale;
 }
