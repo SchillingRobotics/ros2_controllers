@@ -20,8 +20,9 @@
 
 constexpr auto ROS_LOG_THROTTLE_PERIOD = std::chrono::milliseconds(3000).count();
 // TODO: Parameterize singularity thresholds
-constexpr double LOWER_SINGULARITY_THRESHOLD = 20.; //17.;
-constexpr double HARD_STOP_SINGULARITY_THRESHOLD = 60.; //30.;
+constexpr double LOWER_SINGULARITY_THRESHOLD = 20.;
+constexpr double APPROACHING_STOP_SINGULARITY_THRESHOLD = 60.;
+constexpr double HARD_STOP_SINGULARITY_THRESHOLD = 120.;
 
 namespace admittance_controller
 {
@@ -194,31 +195,26 @@ double MoveItKinematics::velocityScalingFactorForSingularity(const Eigen::Vector
     vector_toward_singularity *= -1;
   }
 
-  // // If this dot product is positive, we're moving toward singularity ==> decelerate
-  // double dot = vector_toward_singularity.dot(commanded_velocity);
-  // if (dot > 0)
-  // {
-    // Ramp velocity down linearly when the Jacobian condition is between lower_singularity_threshold and
-    // hard_stop_singularity_threshold, and we're moving towards the singularity
-    // TODO: Parameterize
-    if ((ini_condition > LOWER_SINGULARITY_THRESHOLD) &&
-        (ini_condition < HARD_STOP_SINGULARITY_THRESHOLD))
-    {
-      velocity_scale =
-          1. - (ini_condition - LOWER_SINGULARITY_THRESHOLD) /
-                   (HARD_STOP_SINGULARITY_THRESHOLD - LOWER_SINGULARITY_THRESHOLD);
-      // status_ = StatusCode::DECELERATE_FOR_SINGULARITY;
-      RCLCPP_WARN_STREAM_THROTTLE(node_->get_logger(), *node_->get_clock(), ROS_LOG_THROTTLE_PERIOD, "Close to a singularity, decelerating");
-    }
+  // If this dot product is positive, we're moving toward singularity ==> decelerate
+  double dot = vector_toward_singularity.dot(commanded_velocity);
+  double upper_threshold = dot > 0 ? APPROACHING_STOP_SINGULARITY_THRESHOLD : HARD_STOP_SINGULARITY_THRESHOLD;
+  // Ramp velocity down linearly when the Jacobian condition is between lower_singularity_threshold and
+  // hard_stop_singularity_threshold, and we're moving towards the singularity
+  if ((ini_condition > LOWER_SINGULARITY_THRESHOLD) &&
+      (ini_condition < upper_threshold))
+  {
+    velocity_scale =
+        1. - (ini_condition - LOWER_SINGULARITY_THRESHOLD) /
+                 (upper_threshold - LOWER_SINGULARITY_THRESHOLD);
+    RCLCPP_WARN_STREAM_THROTTLE(node_->get_logger(), *node_->get_clock(), ROS_LOG_THROTTLE_PERIOD, "Close to a singularity, decelerating");
+  }
 
-    // Very close to singularity, so halt.
-    else if (ini_condition > HARD_STOP_SINGULARITY_THRESHOLD)
-    {
-      velocity_scale = 0;
-      // status_ = StatusCode::HALT_FOR_SINGULARITY;
-      RCLCPP_WARN_STREAM_THROTTLE(node_->get_logger(), *node_->get_clock(), ROS_LOG_THROTTLE_PERIOD, "Very close to a singularity, emergency stop");
-    }
-  // }
+  // Very close to singularity, so halt.
+  else if (ini_condition > upper_threshold)
+  {
+    velocity_scale = 0;
+    RCLCPP_WARN_STREAM_THROTTLE(node_->get_logger(), *node_->get_clock(), ROS_LOG_THROTTLE_PERIOD, "Very close to a singularity, emergency stop");
+  }
 
   return velocity_scale;
 }
