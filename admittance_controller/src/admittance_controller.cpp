@@ -23,6 +23,8 @@
 #include <string>
 #include <vector>
 
+#include <tf2_ros/buffer.h>
+
 #include "admittance_controller/admittance_rule_impl.hpp"
 #include "angles/angles.h"
 #include "controller_interface/helpers.hpp"
@@ -51,9 +53,9 @@ controller_interface::return_type AdmittanceController::init(const std::string &
 
   try {
     // TODO: use variables as parameters
-    get_node()->declare_parameter<std::vector<std::string>>("joints", {});
-    get_node()->declare_parameter<std::vector<std::string>>("command_interfaces", {});
-    get_node()->declare_parameter<std::vector<std::string>>("state_interfaces", {});
+    get_node()->declare_parameter<std::vector<std::string>>("joints", std::vector<std::string>());
+    get_node()->declare_parameter<std::vector<std::string>>("command_interfaces", std::vector<std::string>());
+    get_node()->declare_parameter<std::vector<std::string>>("state_interfaces", std::vector<std::string>());
     get_node()->declare_parameter<std::string>("ft_sensor_name", "");
     get_node()->declare_parameter<bool>("use_joint_commands_as_input", false);
     get_node()->declare_parameter<bool>("open_loop_control", false);
@@ -252,7 +254,7 @@ CallbackReturn AdmittanceController::on_configure(
     auto it = std::find(
       allowed_interface_types_.begin(), allowed_interface_types_.end(), interface);
     if (it == allowed_interface_types_.end()) {
-      RCLCPP_ERROR(get_node()->get_logger(), "Command interface type '" + interface + "' not allowed!");
+      RCLCPP_ERROR_STREAM(get_node()->get_logger(), "Command interface type '" << interface << "' not allowed!");
       return CallbackReturn::ERROR;
     }
   }
@@ -273,14 +275,14 @@ CallbackReturn AdmittanceController::on_configure(
     auto it = std::find(
       allowed_interface_types_.begin(), allowed_interface_types_.end(), interface);
     if (it == allowed_interface_types_.end()) {
-      RCLCPP_ERROR(get_node()->get_logger(), "State interface type '" + interface + "' not allowed!");
+      RCLCPP_ERROR_STREAM(get_node()->get_logger(), "State interface type '" << interface << "' not allowed!");
       return CallbackReturn::ERROR;
     }
   }
 
   if (!controller_interface::interface_list_contains_interface_type(
     state_interface_types_, hardware_interface::HW_IF_POSITION)) {
-    RCLCPP_ERROR(get_node()->get_logger(), "State interface type '" + std::string(hardware_interface::HW_IF_POSITION) + "' has to be always present allowed!");
+    RCLCPP_ERROR_STREAM(get_node()->get_logger(), "State interface type '" << std::string(hardware_interface::HW_IF_POSITION) << "' has to be always present allowed!");
     return CallbackReturn::ERROR;
   }
 
@@ -434,7 +436,7 @@ CallbackReturn AdmittanceController::on_activate(const rclcpp_lifecycle::State &
       command_interfaces_, joint_names_, interface, joint_command_interface_[index]))
     {
       RCLCPP_ERROR(
-        node_->get_logger(), "Expected %u '%s' command interfaces, got %u.",
+        node_->get_logger(), "Expected %zu '%s' command interfaces, got %zu.",
                    num_joints, interface.c_str(), joint_command_interface_[index].size());
       return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
     }
@@ -447,7 +449,7 @@ CallbackReturn AdmittanceController::on_activate(const rclcpp_lifecycle::State &
       state_interfaces_, joint_names_, interface, joint_state_interface_[index]))
     {
       RCLCPP_ERROR(
-        node_->get_logger(), "Expected %u '%s' state interfaces, got %u.",
+        node_->get_logger(), "Expected %zu '%s' state interfaces, got %zu.",
                    num_joints, interface.c_str(), joint_state_interface_[index].size());
       return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
     }
@@ -491,7 +493,7 @@ CallbackReturn AdmittanceController::on_activate(const rclcpp_lifecycle::State &
   {
     RCLCPP_ERROR(node_->get_logger(),
                  "Can not find transform from '%s' to '%s' needed in the update loop",
-                 admittance_->ik_base_frame_, admittance_->control_frame_);
+                 admittance_->ik_base_frame_.c_str(), admittance_->control_frame_.c_str());
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
   }
   input_pose_command_.writeFromNonRT(msg_pose);

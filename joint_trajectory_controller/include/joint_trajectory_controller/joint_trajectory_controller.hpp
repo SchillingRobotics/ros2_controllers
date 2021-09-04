@@ -179,7 +179,7 @@ protected:
   rclcpp::Publisher<ControllerStateMsg>::SharedPtr publisher_;
   StatePublisherPtr state_publisher_;
 
-  rclcpp::Duration state_publisher_period_ = rclcpp::Duration(RCUTILS_MS_TO_NS(20));
+  rclcpp::Duration state_publisher_period_ = rclcpp::Duration::from_nanoseconds(RCUTILS_MS_TO_NS(20));
   rclcpp::Time last_state_publish_time_;
 
   using FollowJTrajAction = control_msgs::action::FollowJointTrajectory;
@@ -191,7 +191,7 @@ protected:
   bool allow_partial_joints_goal_ = false;
   RealtimeGoalHandleBuffer rt_active_goal_;     ///< Currently active action goal, if any.
   rclcpp::TimerBase::SharedPtr goal_handle_timer_;
-  rclcpp::Duration action_monitor_period_ = rclcpp::Duration(RCUTILS_MS_TO_NS(50));
+  rclcpp::Duration action_monitor_period_ = rclcpp::Duration::from_nanoseconds(RCUTILS_MS_TO_NS(50));
 
   // callbacks for action_server_
   rclcpp_action::GoalResponse goal_callback(

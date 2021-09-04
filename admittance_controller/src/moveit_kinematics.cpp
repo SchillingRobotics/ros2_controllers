@@ -16,7 +16,7 @@
 
 #include "admittance_controller/moveit_kinematics.hpp"
 
-#include "tf2_eigen/tf2_eigen.h"
+#include "tf2_eigen/tf2_eigen.hpp"
 
 constexpr auto ROS_LOG_THROTTLE_PERIOD = std::chrono::milliseconds(3000).count();
 // TODO: Parameterize singularity thresholds

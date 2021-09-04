@@ -31,7 +31,7 @@ TEST_P(AdmittanceControllerTestParameterizedParameters, one_parameter_is_missing
 }
 
 // TODO(anyone): the new gtest version afer 1.8.0 uses INSTANTIATE_TEST_SUITE_P
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   MissingMandatoryParameterDuringConfiguration,
   AdmittanceControllerTestParameterizedParameters,
   ::testing::Values(

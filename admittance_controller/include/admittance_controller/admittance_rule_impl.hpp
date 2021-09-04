@@ -26,7 +26,7 @@
 #include "rclcpp/duration.hpp"
 #include "rclcpp/utilities.hpp"
 #include "tf2/utils.h"
-#include "tf2_eigen/tf2_eigen.h"
+#include "tf2_eigen/tf2_eigen.hpp"
 
 namespace admittance_controller
 {

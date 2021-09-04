@@ -412,7 +412,7 @@ JointTrajectoryController::on_configure(const rclcpp_lifecycle::State &)
     auto it = std::find(
       allowed_interface_types_.begin(), allowed_interface_types_.end(), interface);
     if (it == allowed_interface_types_.end()) {
-      RCLCPP_ERROR(logger, "Command interface type '" + interface + "' not allowed!");
+      RCLCPP_ERROR_STREAM(logger, "Command interface type '" << interface << "' not allowed!");
       return CallbackReturn::FAILURE;
     }
   }
@@ -493,7 +493,7 @@ JointTrajectoryController::on_configure(const rclcpp_lifecycle::State &)
     auto it = std::find(
       allowed_interface_types_.begin(), allowed_interface_types_.end(), interface);
     if (it == allowed_interface_types_.end()) {
-      RCLCPP_ERROR(logger, "State interface type '" + interface + "' not allowed!");
+      RCLCPP_ERROR_STREAM(logger, "State interface type '" << interface << "' not allowed!");
       return CallbackReturn::FAILURE;
     }
   }
@@ -684,7 +684,7 @@ JointTrajectoryController::on_activate(const rclcpp_lifecycle::State &)
         command_interfaces_, joint_names_, interface, joint_command_interface_[index]))
     {
       RCLCPP_ERROR(
-        node_->get_logger(), "Expected %u '%s' command interfaces, got %u.",
+        node_->get_logger(), "Expected %zu '%s' command interfaces, got %zu.",
         joint_names_.size(), interface.c_str(), joint_command_interface_[index].size());
       return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
     }
@@ -697,7 +697,7 @@ JointTrajectoryController::on_activate(const rclcpp_lifecycle::State &)
         state_interfaces_, joint_names_, interface, joint_state_interface_[index]))
     {
       RCLCPP_ERROR(
-        node_->get_logger(), "Expected %u '%s' state interfaces, got %u.",
+        node_->get_logger(), "Expected %zu '%s' state interfaces, got %zu.",
         joint_names_.size(), interface.c_str(), joint_state_interface_[index].size());
       return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
     }
@@ -1060,7 +1060,7 @@ bool JointTrajectoryController::validate_trajectory_msg(
     }
   }
 
-  rclcpp::Duration previous_traj_time(0);
+  rclcpp::Duration previous_traj_time(rclcpp::Duration::from_seconds(0));
   for (auto i = 0ul; i < trajectory.points.size(); ++i) {
     if ((i > 0) && (rclcpp::Duration(trajectory.points[i].time_from_start) <= previous_traj_time)) {
       RCLCPP_ERROR(

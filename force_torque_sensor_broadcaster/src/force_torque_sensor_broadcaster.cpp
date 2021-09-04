@@ -23,7 +23,6 @@
 #include <string>
 
 #include "tf2/utils.h"
-#include "tf2_geometry_msgs/tf2_geometry_msgs.h"
 
 namespace force_torque_sensor_broadcaster
 {
@@ -49,7 +48,7 @@ ForceTorqueSensorBroadcaster::init(const std::string & controller_name)
     get_node()->declare_parameter<std::string>("interface_names.torque.y", "");
     get_node()->declare_parameter<std::string>("interface_names.torque.z", "");
     get_node()->declare_parameter<std::string>("frame_id", "");
-    get_node()->declare_parameter<std::vector<std::string>>("additional_frames_to_publish", {});
+    get_node()->declare_parameter<std::vector<std::string>>("additional_frames_to_publish", std::vector<std::string>());
   } catch (const std::exception & e) {
     fprintf(stderr, "Exception thrown during init stage with message: %s \n", e.what());
     return controller_interface::return_type::ERROR;
@@ -244,10 +243,10 @@ controller_interface::return_type ForceTorqueSensorBroadcaster::update() {
         publisher->unlockAndPublish();
       }
     } catch (const tf2::TransformException & e) {
-      RCLCPP_ERROR_SKIPFIRST_THROTTLE(
+      RCLCPP_ERROR_STREAM_SKIPFIRST_THROTTLE(
         rclcpp::get_logger("FTSBroadcaster"), *(get_node()->get_clock()), 5000,
-                           "LookupTransform failed from '" + frame_id_ + "' to '" +
-                           publisher->msg_.header.frame_id + "'.");
+                           "LookupTransform failed from '" << frame_id_ << "' to '" <<
+                           publisher->msg_.header.frame_id << "'.");
       publisher->msg_.wrench.force.x = std::numeric_limits<double>::quiet_NaN();
       publisher->msg_.wrench.force.y = std::numeric_limits<double>::quiet_NaN();
       publisher->msg_.wrench.force.z = std::numeric_limits<double>::quiet_NaN();

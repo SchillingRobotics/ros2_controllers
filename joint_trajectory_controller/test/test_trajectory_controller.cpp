@@ -1203,7 +1203,7 @@ TEST_P(
 // TODO(anyone): the new gtest version afer 1.8.0 uses INSTANTIATE_TEST_SUITE_P
 
 // position controllers
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   PositionTrajectoryControllers,
   TrajectoryControllerTestParameterized,
   ::testing::Values(
@@ -1220,7 +1220,7 @@ INSTANTIATE_TEST_CASE_P(
 );
 
 // position_velocity controllers
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   PositionVelocityTrajectoryControllers,
   TrajectoryControllerTestParameterized,
   ::testing::Values(
@@ -1237,7 +1237,7 @@ INSTANTIATE_TEST_CASE_P(
 );
 
 // position_velocity_acceleration controllers
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   PositionVelocityAccelerationTrajectoryControllers,
   TrajectoryControllerTestParameterized,
   ::testing::Values(
