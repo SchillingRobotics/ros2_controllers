@@ -1126,9 +1126,8 @@ TEST_P(TrajectoryControllerTestParameterized, test_hw_states_has_offset_later_co
   executor.cancel();
 }
 
-// TODO(anyone): the new gtest version after 1.8.0 uses INSTANTIATE_TEST_SUITE_P
 // position controllers
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   PositionTrajectoryControllers, TrajectoryControllerTestParameterized,
   ::testing::Values(
     std::make_tuple(std::vector<std::string>({"position"}), std::vector<std::string>({"position"})),
@@ -1139,7 +1138,7 @@ INSTANTIATE_TEST_CASE_P(
       std::vector<std::string>({"position", "velocity", "acceleration"}))));
 
 // position_velocity controllers
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   PositionVelocityTrajectoryControllers, TrajectoryControllerTestParameterized,
   ::testing::Values(
     std::make_tuple(
@@ -1152,7 +1151,7 @@ INSTANTIATE_TEST_CASE_P(
       std::vector<std::string>({"position", "velocity", "acceleration"}))));
 
 // position_velocity_acceleration controllers
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   PositionVelocityAccelerationTrajectoryControllers, TrajectoryControllerTestParameterized,
   ::testing::Values(
     std::make_tuple(
