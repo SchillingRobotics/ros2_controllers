@@ -36,10 +36,9 @@ MultiInterfaceForwardController::on_init()
   }
 
   try {
-    node_->undeclare_parameter("joints");
-    node_->undeclare_parameter("interface_name");
-    auto_declare<std::vector<std::string>>(
-      "joints_interfaces", joints_interfaces_);
+    get_node()->set_parameter(rclcpp::Parameter("joints", std::vector<std::string>()));
+    get_node()->set_parameter(rclcpp::Parameter("interface_name", ""));
+    auto_declare<std::vector<std::string>>("joints_interfaces", joints_interfaces_);
   } catch (const std::exception & e) {
     fprintf(stderr, "Exception thrown during init stage with message: %s \n", e.what());
     return CallbackReturn::ERROR;
@@ -50,10 +49,10 @@ MultiInterfaceForwardController::on_init()
 
 CallbackReturn MultiInterfaceForwardController::read_parameters()
 {
-  joints_interfaces_ = node_->get_parameter("joints_interfaces").as_string_array();
+  joints_interfaces_ = get_node()->get_parameter("joints_interfaces").as_string_array();
 
   if (joints_interfaces_.empty()) {
-    RCLCPP_ERROR(node_->get_logger(), "'joints_interfaces' parameter was empty");
+    RCLCPP_ERROR(get_node()->get_logger(), "'joints_interfaces' parameter was empty");
     return CallbackReturn::ERROR;
   }
 

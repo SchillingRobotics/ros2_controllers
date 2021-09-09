@@ -39,9 +39,9 @@ CallbackReturn ForwardCommandController::on_init()
 {
   try
   {
-    auto_declare<std::vector<std::string>>("joints", std::vector<std::string>(), true);
+    auto_declare<std::vector<std::string>>("joints", std::vector<std::string>());
 
-    auto_declare<std::string>("interface_name", "", true);
+    auto_declare<std::string>("interface_name", "");
   }
   catch (const std::exception & e)
   {

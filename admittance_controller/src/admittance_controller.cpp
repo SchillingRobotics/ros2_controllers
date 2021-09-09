@@ -103,18 +103,17 @@ CallbackReturn AdmittanceController::on_init()
 
   } catch (const std::exception & e) {
     fprintf(stderr, "Exception thrown during init stage with message: %s \n", e.what());
-    return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
+    return CallbackReturn::ERROR;
   }
 
   admittance_ = std::make_unique<admittance_controller::AdmittanceRule>();
 
-  return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
+  return CallbackReturn::SUCCESS;
 }
 
 CallbackReturn AdmittanceController::on_configure(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
-
   auto error_if_empty = [&](const auto & parameter, const char * parameter_name) {
     if (parameter.empty()) {
       RCLCPP_ERROR(get_node()->get_logger(), "'%s' parameter was empty", parameter_name);

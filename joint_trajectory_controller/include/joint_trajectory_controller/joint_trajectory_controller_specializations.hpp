@@ -19,9 +19,12 @@
 
 #include "joint_trajectory_controller/joint_trajectory_controller.hpp"
 #include "joint_trajectory_controller/visibility_control.h"
+#include "rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp"
 
 namespace position_controllers
 {
+using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
+
 
 /**
  * \brief
@@ -32,7 +35,7 @@ class JointTrajectoryController : joint_trajectory_controller::JointTrajectoryCo
   JointTrajectoryController();
 
   JOINT_TRAJECTORY_CONTROLLER_PUBLIC
-  CallbackReturn init(const std::string & controller_name) override;
+  CallbackReturn on_init(const std::string & controller_name) override;
 };
 
 }  // namespace position_controllers
