@@ -18,7 +18,6 @@ find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
-find_package(rcutils REQUIRED)
 find_package(realtime_tools REQUIRED)
 find_package(trajectory_msgs REQUIRED)
 
@@ -36,15 +35,12 @@ ament_target_dependencies(joint_trajectory_controller
   pluginlib
   rclcpp
   rclcpp_lifecycle
-  rcutils
   realtime_tools
   trajectory_msgs
 )
 # Causes the visibility macros to use dllexport rather than dllimport,
 # which is appropriate when building the dll but not consuming it.
 target_compile_definitions(joint_trajectory_controller PRIVATE "JOINT_TRAJECTORY_CONTROLLER_BUILDING_DLL" "_USE_MATH_DEFINES")
-# prevent pluginlib from using boost
-target_compile_definitions(joint_trajectory_controller PUBLIC "PLUGINLIB__DISABLE_BOOST_FUNCTIONS")
 pluginlib_export_plugin_description_file(controller_interface joint_trajectory_plugin.xml)
 
 install(DIRECTORY include/
@@ -59,11 +55,8 @@ install(TARGETS joint_trajectory_controller
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
-  find_package(ament_lint_auto REQUIRED)
   find_package(controller_manager REQUIRED)
   find_package(ros2_control_test_assets REQUIRED)
-
-  ament_lint_auto_find_test_dependencies()
 
   ament_add_gtest(test_trajectory test/test_trajectory.cpp)
   target_include_directories(test_trajectory PRIVATE include)
@@ -82,7 +75,6 @@ if(BUILD_TESTING)
     hardware_interface
     rclcpp
     rclcpp_lifecycle
-    rcutils
     realtime_tools
     ros2_control_test_assets
     trajectory_msgs
@@ -98,7 +90,6 @@ if(BUILD_TESTING)
     realtime_tools
     ros2_control_test_assets
   )
-  target_compile_definitions(test_load_joint_trajectory_controller PUBLIC "PLUGINLIB__DISABLE_BOOST_FUNCTIONS")
 
   ament_add_gtest(
     test_trajectory_actions
@@ -113,7 +104,6 @@ if(BUILD_TESTING)
     hardware_interface
     rclcpp
     rclcpp_lifecycle
-    rcutils
     ros2_control_test_assets
     trajectory_msgs
     realtime_tools

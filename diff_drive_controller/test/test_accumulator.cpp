@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#ifdef _MSC_VER
+#define _USE_MATH_DEFINES
+#endif
 #include <diff_drive_controller/rolling_mean_accumulator.hpp>
 
 #include <gmock/gmock.h>
 #include <cmath>
 #include <memory>
-
 
 TEST(TestAccumulator, test_accumulator)
 {
@@ -48,7 +50,8 @@ TEST(TestAccumulator, spam_accumulator)
 {
   constexpr double THRESHOLD = 1e-12;
   diff_drive_controller::RollingMeanAccumulator<double> accum(10);
-  for (int i = 0; i < 10000; ++i) {
+  for (int i = 0; i < 10000; ++i)
+  {
     accum.accumulate(M_PI);
     EXPECT_NEAR(M_PI, accum.getRollingMean(), THRESHOLD);
   }

@@ -2,6 +2,41 @@
 Changelog for package joint_trajectory_controller
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.5.0 (2021-08-30)
+------------------
+* Add auto declaration of parameters. (`#224 <https://github.com/ros-controls/ros2_controllers/issues/224>`_)
+* Bring precommit config up to speed with ros2_control (`#227 <https://github.com/ros-controls/ros2_controllers/issues/227>`_)
+* Add initial pre-commit setup. (`#220 <https://github.com/ros-controls/ros2_controllers/issues/220>`_)
+* Enable JTC for hardware having offset from state measurements (`#189 <https://github.com/ros-controls/ros2_controllers/issues/189>`_)
+  * Avoid "jumps" with states that have tracking error. All test are passing but separatelly. Is there some kind of timeout?
+  * Remove allow_integration_flag
+  * Add reading from command interfaces when restarting controller
+* Reduce docs warnings and correct adding guidelines (`#219 <https://github.com/ros-controls/ros2_controllers/issues/219>`_)
+* Contributors: Bence Magyar, Denis Štogl, Lovro Ivanov
+
+0.4.1 (2021-07-08)
+------------------
+
+0.4.0 (2021-06-28)
+------------------
+* Force torque sensor broadcaster (`#152 <https://github.com/ros-controls/ros2_controllers/issues/152>`_)
+  * Stabilize joint_trajectory_controller tests
+  * Add  rclcpp::shutdown(); to all standalone test functions
+* Fixes for Windows (`#205 <https://github.com/ros-controls/ros2_controllers/issues/205>`_)
+  * Export protected joint trajectory controller functions
+* Fix deprecation warnings on Rolling, remove rcutils dependency (`#204 <https://github.com/ros-controls/ros2_controllers/issues/204>`_)
+* Fix parameter initialisation for galactic (`#199 <https://github.com/ros-controls/ros2_controllers/issues/199>`_)
+  * Fix parameter initialisation for galactic
+  * Fix forward_command_controller the same way
+  * Fix other compiler warnings
+  * Missing space
+* Fix rolling build (`#200 <https://github.com/ros-controls/ros2_controllers/issues/200>`_)
+  * Fix rolling build
+  * Stick to printf style
+  * Add back :: around interface type
+  Co-authored-by: Bence Magyar <bence.magyar.robotics@gmail.com>
+* Contributors: Akash, Bence Magyar, Denis Štogl, Tim Clephas, Vatan Aksoy Tezer
+
 0.3.1 (2021-05-23)
 ------------------
 * Reset external trajectory message upon activation (`#185 <https://github.com/ros-controls/ros2_controllers/issues/185>`_)

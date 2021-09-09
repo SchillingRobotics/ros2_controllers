@@ -86,8 +86,6 @@ if(BUILD_TESTING)
     hardware_interface
     ros2_control_test_assets
   )
-  # prevent pluginlib from using boost
-  target_compile_definitions(test_load_force_torque_sensor_broadcaster PUBLIC "PLUGINLIB__DISABLE_BOOST_FUNCTIONS")
 
   ament_add_gmock(
     test_force_torque_sensor_broadcaster

@@ -26,35 +26,32 @@
 
 namespace force_torque_sensor_broadcaster
 {
-
 ForceTorqueSensorBroadcaster::ForceTorqueSensorBroadcaster()
 : controller_interface::ControllerInterface()
-{}
-
-controller_interface::return_type
-ForceTorqueSensorBroadcaster::init(const std::string & controller_name)
 {
-  auto ret = ControllerInterface::init(controller_name);
-  if (ret != controller_interface::return_type::OK) {
-    return ret;
-  }
+}
 
-  try {
-    get_node()->declare_parameter<std::string>("sensor_name", "");
-    get_node()->declare_parameter<std::string>("interface_names.force.x", "");
-    get_node()->declare_parameter<std::string>("interface_names.force.y", "");
-    get_node()->declare_parameter<std::string>("interface_names.force.z", "");
-    get_node()->declare_parameter<std::string>("interface_names.torque.x", "");
-    get_node()->declare_parameter<std::string>("interface_names.torque.y", "");
-    get_node()->declare_parameter<std::string>("interface_names.torque.z", "");
-    get_node()->declare_parameter<std::string>("frame_id", "");
-    get_node()->declare_parameter<std::vector<std::string>>("additional_frames_to_publish", std::vector<std::string>());
-  } catch (const std::exception & e) {
+CallbackReturn ForceTorqueSensorBroadcaster::on_init()
+{
+  try
+  {
+    auto_declare<std::string>("sensor_name", "");
+    auto_declare<std::string>("interface_names.force.x", "");
+    auto_declare<std::string>("interface_names.force.y", "");
+    auto_declare<std::string>("interface_names.force.z", "");
+    auto_declare<std::string>("interface_names.torque.x", "");
+    auto_declare<std::string>("interface_names.torque.y", "");
+    auto_declare<std::string>("interface_names.torque.z", "");
+    auto_declare<std::string>("frame_id", "");
+    auto_declare<std::vector<std::string>>("additional_frames_to_publish", std::vector<std::string>());
+  }
+  catch (const std::exception & e)
+  {
     fprintf(stderr, "Exception thrown during init stage with message: %s \n", e.what());
-    return controller_interface::return_type::ERROR;
+    return CallbackReturn::ERROR;
   }
 
-  return controller_interface::return_type::OK;
+  return CallbackReturn::SUCCESS;
 }
 
 CallbackReturn ForceTorqueSensorBroadcaster::on_configure(
@@ -68,20 +65,23 @@ CallbackReturn ForceTorqueSensorBroadcaster::on_configure(
   interface_names_[4] = get_node()->get_parameter("interface_names.torque.y").as_string();
   interface_names_[5] = get_node()->get_parameter("interface_names.torque.z").as_string();
 
-  const bool no_interface_names_defined = std::count(
-    interface_names_.begin(),
-    interface_names_.end(), "") == 6;
+  const bool no_interface_names_defined =
+    std::count(interface_names_.begin(), interface_names_.end(), "") == 6;
 
-  if (sensor_name_.empty() && no_interface_names_defined) {
+  if (sensor_name_.empty() && no_interface_names_defined)
+  {
     RCLCPP_ERROR(
-      get_node()->get_logger(), "'sensor_name' or at least one "
+      node_->get_logger(),
+      "'sensor_name' or at least one "
       "'interface_names.[force|torque].[x|y|z]' parameter has to be specified.");
     return CallbackReturn::ERROR;
   }
 
-  if (!sensor_name_.empty() && !no_interface_names_defined) {
+  if (!sensor_name_.empty() && !no_interface_names_defined)
+  {
     RCLCPP_ERROR(
-      get_node()->get_logger(), "both 'sensor_name' and "
+      node_->get_logger(),
+      "both 'sensor_name' and "
       "'interface_names.[force|torque].[x|y|z]' parameters can not be specified together.");
     return CallbackReturn::ERROR;
   }

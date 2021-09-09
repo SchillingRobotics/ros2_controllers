@@ -21,9 +21,9 @@
 
 #include "controller_interface/controller_interface.hpp"
 #include "forward_command_controller/visibility_control.h"
+#include "rclcpp/subscription.hpp"
 #include "rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp"
 #include "rclcpp_lifecycle/state.hpp"
-#include "rclcpp/subscription.hpp"
 #include "realtime_tools/realtime_buffer.h"
 #include "std_msgs/msg/float64_multi_array.hpp"
 
@@ -51,13 +51,13 @@ public:
   ForwardCommandController();
 
   FORWARD_COMMAND_CONTROLLER_PUBLIC
-  controller_interface::return_type init(const std::string & controller_name) override;
-
-  FORWARD_COMMAND_CONTROLLER_PUBLIC
   controller_interface::InterfaceConfiguration command_interface_configuration() const override;
 
   FORWARD_COMMAND_CONTROLLER_PUBLIC
   controller_interface::InterfaceConfiguration state_interface_configuration() const override;
+
+  FORWARD_COMMAND_CONTROLLER_PUBLIC
+  CallbackReturn on_init() override;
 
   FORWARD_COMMAND_CONTROLLER_PUBLIC
   CallbackReturn on_configure(const rclcpp_lifecycle::State & previous_state) override;

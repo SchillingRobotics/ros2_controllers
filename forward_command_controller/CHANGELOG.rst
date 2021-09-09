@@ -2,6 +2,24 @@
 Changelog for package forward_command_controller
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.5.0 (2021-08-30)
+------------------
+* Add auto declaration of parameters. (`#224 <https://github.com/ros-controls/ros2_controllers/issues/224>`_)
+* Bring precommit config up to speed with ros2_control (`#227 <https://github.com/ros-controls/ros2_controllers/issues/227>`_)
+* Add initial pre-commit setup. (`#220 <https://github.com/ros-controls/ros2_controllers/issues/220>`_)
+* Reduce docs warnings and correct adding guidelines (`#219 <https://github.com/ros-controls/ros2_controllers/issues/219>`_)
+* Contributors: Bence Magyar, Denis Štogl, Lovro Ivanov
+
+0.4.1 (2021-07-08)
+------------------
+
+0.4.0 (2021-06-28)
+------------------
+* Force torque sensor broadcaster (`#152 <https://github.com/ros-controls/ros2_controllers/issues/152>`_)
+  * Add  rclcpp::shutdown(); to all standalone test functions
+* Fix parameter initialisation for galactic (`#199 <https://github.com/ros-controls/ros2_controllers/issues/199>`_)
+* Contributors: Denis Štogl, Tim Clephas
+
 0.3.1 (2021-05-23)
 ------------------
 

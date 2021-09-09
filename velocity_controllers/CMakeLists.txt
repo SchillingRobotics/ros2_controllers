@@ -47,11 +47,8 @@ install(
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gmock REQUIRED)
-  find_package(ament_lint_auto REQUIRED)
   find_package(controller_manager REQUIRED)
   find_package(ros2_control_test_assets REQUIRED)
-
-  ament_lint_auto_find_test_dependencies()
 
   ament_add_gmock(
     test_load_joint_group_velocity_controller
@@ -62,7 +59,6 @@ if(BUILD_TESTING)
     controller_manager
     ros2_control_test_assets
   )
-  target_compile_definitions(test_load_joint_group_velocity_controller PUBLIC "PLUGINLIB__DISABLE_BOOST_FUNCTIONS")
 
   ament_add_gmock(
     test_joint_group_velocity_controller

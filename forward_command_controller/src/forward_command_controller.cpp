@@ -19,8 +19,8 @@
 #include <utility>
 #include <vector>
 
-#include "rclcpp/qos.hpp"
 #include "rclcpp/logging.hpp"
+#include "rclcpp/qos.hpp"
 
 #include "hardware_interface/loaned_command_interface.hpp"
 
@@ -32,43 +32,45 @@ ForwardCommandController::ForwardCommandController()
 : controller_interface::ControllerInterface(),
   rt_command_ptr_(nullptr),
   joints_command_subscriber_(nullptr)
-{}
-
-controller_interface::return_type
-ForwardCommandController::init(const std::string & controller_name)
 {
-  auto ret = ControllerInterface::init(controller_name);
-  if (ret != controller_interface::return_type::OK) {
-    return ret;
-  }
+}
 
-  try {
-    node_->declare_parameter<std::vector<std::string>>("joints", {});
-    node_->declare_parameter<std::string>("interface_name", "");
-  } catch (const std::exception & e) {
+CallbackReturn ForwardCommandController::on_init()
+{
+  try
+  {
+    auto_declare<std::vector<std::string>>("joints", std::vector<std::string>());
+
+    auto_declare<std::string>("interface_name", "");
+  }
+  catch (const std::exception & e)
+  {
     fprintf(stderr, "Exception thrown during init stage with message: %s \n", e.what());
-    return controller_interface::return_type::ERROR;
+    return CallbackReturn::ERROR;
   }
 
-  return controller_interface::return_type::OK;
+  return CallbackReturn::SUCCESS;
 }
 
 CallbackReturn ForwardCommandController::read_parameters()
 {
-  joint_names_ = node_->get_parameter("joints").as_string_array();
+  joint_names_ = get_node()->get_parameter("joints").as_string_array();
 
-  if (joint_names_.empty()) {
-    RCLCPP_ERROR(node_->get_logger(), "'joints' parameter was empty");
+  if (joint_names_.empty())
+  {
+    RCLCPP_ERROR(get_node()->get_logger(), "'joints' parameter was empty");
     return CallbackReturn::ERROR;
   }
 
   // Specialized, child controllers set interfaces before calling configure function.
-  if (interface_name_.empty()) {
-    interface_name_ = node_->get_parameter("interface_name").as_string();
+  if (interface_name_.empty())
+  {
+    interface_name_ = get_node()->get_parameter("interface_name").as_string();
   }
 
-  if (interface_name_.empty()) {
-    RCLCPP_ERROR(node_->get_logger(), "'interface_name' parameter was empty");
+  if (interface_name_.empty())
+  {
+    RCLCPP_ERROR(get_node()->get_logger(), "'interface_name' parameter was empty");
     return CallbackReturn::ERROR;
   }
 
@@ -87,14 +89,11 @@ CallbackReturn ForwardCommandController::on_configure(
     return ret;
   }
 
-  joints_command_subscriber_ = node_->create_subscription<CmdType>(
+  joints_command_subscriber_ = get_node()->create_subscription<CmdType>(
     "~/commands", rclcpp::SystemDefaultsQoS(),
-    [this](const CmdType::SharedPtr msg)
-    {
-      rt_command_ptr_.writeFromNonRT(msg);
-    });
+    [this](const CmdType::SharedPtr msg) { rt_command_ptr_.writeFromNonRT(msg); });
 
-  RCLCPP_INFO_STREAM(node_->get_logger(), "configure successful");
+  RCLCPP_INFO(get_node()->get_logger(), "configure successful");
   return CallbackReturn::SUCCESS;
 }
 
@@ -119,17 +118,17 @@ ForwardCommandController::state_interface_configuration() const
 }
 
 // Fill ordered_interfaces with references to the matching interfaces
-// in the same order as in command_interface_types_
-template<typename T>
+// in the same order as in joint_names
+template <typename T>
 bool get_ordered_interfaces(
   std::vector<T> & unordered_interfaces, const std::vector<std::string> & controller_joints_itfs,
   std::vector<std::reference_wrapper<T>> & ordered_interfaces)
 {
-  for (const auto & controller_interface : controller_joints_itfs) {
-    for (auto & command_interface : unordered_interfaces) {
-      if (controller_interface ==
-        // TODO(anyone): Use here command_interface.get_full_name when merged (ros2_control#)
-        (command_interface.get_name() + "/" + command_interface.get_interface_name()))
+  for (const auto & controller_interface : controller_joints_itfs)
+  {
+    for (auto & command_interface : unordered_interfaces)
+    {
+      if (controller_interface == command_interface.get_full_name())
       {
         ordered_interfaces.push_back(std::ref(command_interface));
       }
@@ -145,14 +144,15 @@ CallbackReturn ForwardCommandController::on_activate(
   //  check if we have all resources defined in the "points" parameter
   //  also verify that we *only* have the resources defined in the "points" parameter
   std::vector<std::reference_wrapper<LoanedCommandInterface>> ordered_interfaces;
-  if (!get_ordered_interfaces(
+  if (
+    !get_ordered_interfaces(
       command_interfaces_, command_interface_types_, ordered_interfaces) ||
     command_interfaces_.size() != ordered_interfaces.size())
   {
     RCLCPP_ERROR(
-      node_->get_logger(),
-      "Expected %u command interfaces, got %u",
-      joint_names_.size(), ordered_interfaces.size());
+      get_node()->get_logger(), "Expected %zu position command interfaces, got %zu", joint_names_.size(),
+      ordered_interfaces.size());
+
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
   }
 
@@ -170,21 +170,22 @@ controller_interface::return_type ForwardCommandController::update()
   auto joint_commands = rt_command_ptr_.readFromRT();
 
   // no command received yet
-  if (!joint_commands || !(*joint_commands)) {
+  if (!joint_commands || !(*joint_commands))
+  {
     return controller_interface::return_type::OK;
   }
 
-  if ((*joint_commands)->data.size() != command_interfaces_.size()) {
-    RCLCPP_ERROR_STREAM_THROTTLE(
-      node_->get_logger(),
-      *node_->get_clock(), 1000,
-      "command size (" << (*joint_commands)->data.size() <<
-        ") does not match number of interfaces (" <<
-        command_interfaces_.size() << ")");
+  if ((*joint_commands)->data.size() != command_interfaces_.size())
+  {
+    RCLCPP_ERROR_THROTTLE(
+      get_node()->get_logger(), *get_node()->get_clock(), 1000,
+      "command size (%zu) does not match number of interfaces (%zu)",
+      (*joint_commands)->data.size(), command_interfaces_.size());
     return controller_interface::return_type::ERROR;
   }
 
-  for (auto index = 0ul; index < command_interfaces_.size(); ++index) {
+  for (auto index = 0ul; index < command_interfaces_.size(); ++index)
+  {
     command_interfaces_[index].set_value((*joint_commands)->data[index]);
   }
 
