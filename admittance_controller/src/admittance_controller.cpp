@@ -44,80 +44,77 @@ AdmittanceController::AdmittanceController()
 {
 }
 
-controller_interface::return_type AdmittanceController::init(const std::string & controller_name)
+CallbackReturn AdmittanceController::on_init()
 {
-  auto ret = ControllerInterface::init(controller_name);
-  if (ret != controller_interface::return_type::OK) {
-    return ret;
-  }
 
   try {
     // TODO: use variables as parameters
-    get_node()->declare_parameter<std::vector<std::string>>("joints", std::vector<std::string>());
-    get_node()->declare_parameter<std::vector<std::string>>("command_interfaces", std::vector<std::string>());
-    get_node()->declare_parameter<std::vector<std::string>>("state_interfaces", std::vector<std::string>());
-    get_node()->declare_parameter<std::string>("ft_sensor_name", "");
-    get_node()->declare_parameter<bool>("use_joint_commands_as_input", false);
-    get_node()->declare_parameter<bool>("open_loop_control", false);
+    auto_declare<std::vector<std::string>>("joints", std::vector<std::string>());
+    auto_declare<std::vector<std::string>>("command_interfaces", std::vector<std::string>());
+    auto_declare<std::vector<std::string>>("state_interfaces", std::vector<std::string>());
+    auto_declare<std::string>("ft_sensor_name", "");
+    auto_declare<bool>("use_joint_commands_as_input", false);
+    auto_declare<bool>("open_loop_control", false);
 
-    get_node()->declare_parameter<std::string>("IK.base", "");
+    auto_declare<std::string>("IK.base", "");
     // TODO(destogl): enable when IK-plugin support is added
-//     get_node()->declare_parameter<std::string>("IK.plugin", "");
-    get_node()->declare_parameter<std::string>("IK.group_name", "");
+//     auto_declare<std::string>("IK.plugin", "");
+    auto_declare<std::string>("IK.group_name", "");
 
-    get_node()->declare_parameter<std::string>("control_frame", "");
-    get_node()->declare_parameter<std::string>("sensor_frame", "");
+    auto_declare<std::string>("control_frame", "");
+    auto_declare<std::string>("sensor_frame", "");
 
     // TODO(destogl): enable when force/position control is implemented
-//     get_node()->declare_parameter<bool>("admitance.unified_mode", false);
-    get_node()->declare_parameter<bool>("admittance.selected_axes.x", false);
-    get_node()->declare_parameter<bool>("admittance.selected_axes.y", false);
-    get_node()->declare_parameter<bool>("admittance.selected_axes.z", false);
-    get_node()->declare_parameter<bool>("admittance.selected_axes.rx", false);
-    get_node()->declare_parameter<bool>("admittance.selected_axes.ry", false);
-    get_node()->declare_parameter<bool>("admittance.selected_axes.rz", false);
+//     auto_declare<bool>("admitance.unified_mode", false);
+    auto_declare<bool>("admittance.selected_axes.x", false);
+    auto_declare<bool>("admittance.selected_axes.y", false);
+    auto_declare<bool>("admittance.selected_axes.z", false);
+    auto_declare<bool>("admittance.selected_axes.rx", false);
+    auto_declare<bool>("admittance.selected_axes.ry", false);
+    auto_declare<bool>("admittance.selected_axes.rz", false);
 
-    get_node()->declare_parameter<double>("admittance.mass.x", std::numeric_limits<double>::quiet_NaN());
-    get_node()->declare_parameter<double>("admittance.mass.y", std::numeric_limits<double>::quiet_NaN());
-    get_node()->declare_parameter<double>("admittance.mass.z", std::numeric_limits<double>::quiet_NaN());
-    get_node()->declare_parameter<double>("admittance.mass.rx", std::numeric_limits<double>::quiet_NaN());
-    get_node()->declare_parameter<double>("admittance.mass.ry", std::numeric_limits<double>::quiet_NaN());
-    get_node()->declare_parameter<double>("admittance.mass.rz", std::numeric_limits<double>::quiet_NaN());
+    auto_declare<double>("admittance.mass.x", std::numeric_limits<double>::quiet_NaN());
+    auto_declare<double>("admittance.mass.y", std::numeric_limits<double>::quiet_NaN());
+    auto_declare<double>("admittance.mass.z", std::numeric_limits<double>::quiet_NaN());
+    auto_declare<double>("admittance.mass.rx", std::numeric_limits<double>::quiet_NaN());
+    auto_declare<double>("admittance.mass.ry", std::numeric_limits<double>::quiet_NaN());
+    auto_declare<double>("admittance.mass.rz", std::numeric_limits<double>::quiet_NaN());
 
-    get_node()->declare_parameter<double>("admittance.damping.x", std::numeric_limits<double>::quiet_NaN());
-    get_node()->declare_parameter<double>("admittance.damping.y", std::numeric_limits<double>::quiet_NaN());
-    get_node()->declare_parameter<double>("admittance.damping.z", std::numeric_limits<double>::quiet_NaN());
-    get_node()->declare_parameter<double>("admittance.damping.rx", std::numeric_limits<double>::quiet_NaN());
-    get_node()->declare_parameter<double>("admittance.damping.ry", std::numeric_limits<double>::quiet_NaN());
-    get_node()->declare_parameter<double>("admittance.damping.rz", std::numeric_limits<double>::quiet_NaN());
+    auto_declare<double>("admittance.damping.x", std::numeric_limits<double>::quiet_NaN());
+    auto_declare<double>("admittance.damping.y", std::numeric_limits<double>::quiet_NaN());
+    auto_declare<double>("admittance.damping.z", std::numeric_limits<double>::quiet_NaN());
+    auto_declare<double>("admittance.damping.rx", std::numeric_limits<double>::quiet_NaN());
+    auto_declare<double>("admittance.damping.ry", std::numeric_limits<double>::quiet_NaN());
+    auto_declare<double>("admittance.damping.rz", std::numeric_limits<double>::quiet_NaN());
 
-    get_node()->declare_parameter<double>("admittance.damping_ratio.x", std::numeric_limits<double>::quiet_NaN());
-    get_node()->declare_parameter<double>("admittance.damping_ratio.y", std::numeric_limits<double>::quiet_NaN());
-    get_node()->declare_parameter<double>("admittance.damping_ratio.z", std::numeric_limits<double>::quiet_NaN());
-    get_node()->declare_parameter<double>("admittance.damping_ratio.rx", std::numeric_limits<double>::quiet_NaN());
-    get_node()->declare_parameter<double>("admittance.damping_ratio.ry", std::numeric_limits<double>::quiet_NaN());
-    get_node()->declare_parameter<double>("admittance.damping_ratio.rz", std::numeric_limits<double>::quiet_NaN());
+    auto_declare<double>("admittance.damping_ratio.x", std::numeric_limits<double>::quiet_NaN());
+    auto_declare<double>("admittance.damping_ratio.y", std::numeric_limits<double>::quiet_NaN());
+    auto_declare<double>("admittance.damping_ratio.z", std::numeric_limits<double>::quiet_NaN());
+    auto_declare<double>("admittance.damping_ratio.rx", std::numeric_limits<double>::quiet_NaN());
+    auto_declare<double>("admittance.damping_ratio.ry", std::numeric_limits<double>::quiet_NaN());
+    auto_declare<double>("admittance.damping_ratio.rz", std::numeric_limits<double>::quiet_NaN());
 
-    get_node()->declare_parameter<double>("admittance.stiffness.x", std::numeric_limits<double>::quiet_NaN());
-    get_node()->declare_parameter<double>("admittance.stiffness.y", std::numeric_limits<double>::quiet_NaN());
-    get_node()->declare_parameter<double>("admittance.stiffness.z", std::numeric_limits<double>::quiet_NaN());
-    get_node()->declare_parameter<double>("admittance.stiffness.rx", std::numeric_limits<double>::quiet_NaN());
-    get_node()->declare_parameter<double>("admittance.stiffness.ry", std::numeric_limits<double>::quiet_NaN());
-    get_node()->declare_parameter<double>("admittance.stiffness.rz", std::numeric_limits<double>::quiet_NaN());
+    auto_declare<double>("admittance.stiffness.x", std::numeric_limits<double>::quiet_NaN());
+    auto_declare<double>("admittance.stiffness.y", std::numeric_limits<double>::quiet_NaN());
+    auto_declare<double>("admittance.stiffness.z", std::numeric_limits<double>::quiet_NaN());
+    auto_declare<double>("admittance.stiffness.rx", std::numeric_limits<double>::quiet_NaN());
+    auto_declare<double>("admittance.stiffness.ry", std::numeric_limits<double>::quiet_NaN());
+    auto_declare<double>("admittance.stiffness.rz", std::numeric_limits<double>::quiet_NaN());
 
   } catch (const std::exception & e) {
     fprintf(stderr, "Exception thrown during init stage with message: %s \n", e.what());
-    return controller_interface::return_type::ERROR;
+    return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
   }
 
   admittance_ = std::make_unique<admittance_controller::AdmittanceRule>();
 
-  return controller_interface::return_type::OK;
+  return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
 
 CallbackReturn AdmittanceController::on_configure(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
+
   auto error_if_empty = [&](const auto & parameter, const char * parameter_name) {
     if (parameter.empty()) {
       RCLCPP_ERROR(get_node()->get_logger(), "'%s' parameter was empty", parameter_name);

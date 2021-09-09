@@ -26,25 +26,26 @@ MultiInterfaceForwardController::MultiInterfaceForwardController()
   logger_name_ = "multi interface forward controller";
 }
 
-controller_interface::return_type
-MultiInterfaceForwardController::init(const std::string & controller_name)
+CallbackReturn
+MultiInterfaceForwardController::on_init()
 {
-  auto ret = ForwardCommandController::init(controller_name);
-  if (ret != controller_interface::return_type::OK) {
+  auto ret = ForwardCommandController::on_init();
+  if (ret != CallbackReturn::SUCCESS)
+  {
     return ret;
   }
 
   try {
     node_->undeclare_parameter("joints");
     node_->undeclare_parameter("interface_name");
-    node_->declare_parameter<std::vector<std::string>>(
+    auto_declare<std::vector<std::string>>(
       "joints_interfaces", joints_interfaces_);
   } catch (const std::exception & e) {
     fprintf(stderr, "Exception thrown during init stage with message: %s \n", e.what());
-    return controller_interface::return_type::ERROR;
+    return CallbackReturn::ERROR;
   }
 
-  return controller_interface::return_type::OK;
+  return CallbackReturn::SUCCESS;
 }
 
 CallbackReturn MultiInterfaceForwardController::read_parameters()

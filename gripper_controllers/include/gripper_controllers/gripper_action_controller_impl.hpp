@@ -335,7 +335,7 @@ GripperActionController<HardwareInterface>::state_interface_configuration() cons
 
 template <const char * HardwareInterface>
 GripperActionController<HardwareInterface>::GripperActionController()
-: controller_interface::ControllerInterface(), action_monitor_period_(0)
+: controller_interface::ControllerInterface(), action_monitor_period_(rclcpp::Duration::from_seconds(0))
 {
 }
 

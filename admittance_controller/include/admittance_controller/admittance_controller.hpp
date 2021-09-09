@@ -49,7 +49,7 @@ public:
   AdmittanceController();
 
   ADMITTANCE_CONTROLLER_PUBLIC
-  controller_interface::return_type init(const std::string & controller_name) override;
+  CallbackReturn on_init() override;
 
   ADMITTANCE_CONTROLLER_PUBLIC
   controller_interface::InterfaceConfiguration command_interface_configuration() const override;

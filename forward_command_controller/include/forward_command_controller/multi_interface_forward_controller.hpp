@@ -32,7 +32,7 @@ public:
   MultiInterfaceForwardController();
 
   FORWARD_COMMAND_CONTROLLER_PUBLIC
-  controller_interface::return_type init(const std::string & controller_name) override;
+  CallbackReturn on_init() override;
 
 protected:
   CallbackReturn read_parameters() override;

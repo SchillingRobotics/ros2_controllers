@@ -32,8 +32,7 @@ class JointTrajectoryController : joint_trajectory_controller::JointTrajectoryCo
   JointTrajectoryController();
 
   JOINT_TRAJECTORY_CONTROLLER_PUBLIC
-  controller_interface::return_type
-  init(const std::string & controller_name) override;
+  CallbackReturn init(const std::string & controller_name) override;
 };
 
 }  // namespace position_controllers
