@@ -61,6 +61,7 @@ JointTrajectoryController::on_init()
     auto_declare<std::vector<std::string>>("joints", joint_names_);
     auto_declare<std::vector<std::string>>("command_interfaces", command_interface_types_);
     auto_declare<std::vector<std::string>>("state_interfaces", state_interface_types_);
+    auto_declare<std::string>("joint_limiter_type", "joint_limits/SimpleJointLimiter");
     auto_declare<double>("state_publish_rate", 50.0);
     auto_declare<double>("action_monitor_rate", 20.0);
     auto_declare<bool>("allow_partial_joints_goal", allow_partial_joints_goal_);
@@ -185,7 +186,7 @@ controller_interface::return_type JointTrajectoryController::update()
     TrajectoryPointConstIter start_segment_itr, end_segment_itr;
     const bool valid_point =
       (*traj_point_active_ptr_)
-        ->sample(node_->now(), state_desired, start_segment_itr, end_segment_itr, joint_limits_);
+        ->sample(node_->now(), state_desired, start_segment_itr, end_segment_itr, joint_limiter_);
 
     if (valid_point)
     {
@@ -308,9 +309,11 @@ controller_interface::return_type JointTrajectoryController::update()
       }
     }
   }
-  else {
+  else
+  {
     state_desired = state_current;
-    for (auto index = 0ul; index < joint_num; ++index) {
+    for (auto index = 0ul; index < joint_num; ++index)
+    {
       compute_error_for_joint(state_error, index, state_current, state_desired);
     }
   }
@@ -616,23 +619,14 @@ JointTrajectoryController::on_configure(const rclcpp_lifecycle::State &)
     get_interface_list(command_interface_types_).c_str(),
     get_interface_list(state_interface_types_).c_str());
 
-  const auto n_joints = joint_names_.size();
+  joint_limiter_type_ = get_node()->get_parameter("joint_limiter_type").get_value<std::string>();
 
   // Initialize joint limits
-  joint_limits_.resize(n_joints);
-  for (auto i = 0ul; i < n_joints; ++i) {
-    joint_limits::declare_parameters(joint_names_[i], get_node());
-    joint_limits::get_joint_limits(joint_names_[i], get_node(), joint_limits_[i]);
-    RCLCPP_INFO(get_node()->get_logger(), "Joint '%s':\n  has position limits: %s [%e, %e]"
-                "\n  has velocity limits: %s [%e]\n  has acceleration limits: %s [%e]",
-                joint_names_[i].c_str(), joint_limits_[i].has_position_limits ? "true" : "false",
-                joint_limits_[i].min_position, joint_limits_[i].max_position,
-                joint_limits_[i].has_velocity_limits ? "true" : "false",
-                joint_limits_[i].max_velocity,
-                joint_limits_[i].has_acceleration_limits ? "true" : "false",
-                joint_limits_[i].max_acceleration
-               );
-  }
+  joint_limiter_loader_ = std::make_shared<pluginlib::ClassLoader<JointLimiter>>(
+    "joint_limits", "joint_limits::JointLimiterInterface<joint_limits::JointLimits>");
+  joint_limiter_ = std::unique_ptr<JointLimiter>(
+    joint_limiter_loader_->createUnmanagedInstance(joint_limiter_type_));
+  joint_limiter_->init(joint_names_, get_node());
 
   default_tolerances_ = get_segment_tolerances(*node_, joint_names_);
 
@@ -640,6 +634,8 @@ JointTrajectoryController::on_configure(const rclcpp_lifecycle::State &)
   open_loop_control_ = node_->get_parameter("open_loop_control").get_value<bool>();
   allow_integration_in_goal_trajectories_ =
     node_->get_parameter("allow_integration_in_goal_trajectories").get_value<bool>();
+
+  const auto n_joints = joint_names_.size();
 
   // subscriber callback
   // non realtime
@@ -762,8 +758,8 @@ JointTrajectoryController::on_activate(const rclcpp_lifecycle::State &)
           command_interfaces_, joint_names_, interface, joint_command_interface_[index]))
     {
       RCLCPP_ERROR(
-        get_node()->get_logger(), "Expected %zu '%s' command interfaces, got %zu.", joint_names_.size(),
-        interface.c_str(), joint_command_interface_[index].size());
+        get_node()->get_logger(), "Expected %zu '%s' command interfaces, got %zu.",
+        joint_names_.size(), interface.c_str(), joint_command_interface_[index].size());
       return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
     }
   }
@@ -776,8 +772,8 @@ JointTrajectoryController::on_activate(const rclcpp_lifecycle::State &)
           state_interfaces_, joint_names_, interface, joint_state_interface_[index]))
     {
       RCLCPP_ERROR(
-        get_node()->get_logger(), "Expected %zu '%s' state interfaces, got %zu.", joint_names_.size(),
-        interface.c_str(), joint_state_interface_[index].size());
+        get_node()->get_logger(), "Expected %zu '%s' state interfaces, got %zu.",
+        joint_names_.size(), interface.c_str(), joint_state_interface_[index].size());
       return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
     }
   }
@@ -942,7 +938,7 @@ rclcpp_action::GoalResponse JointTrajectoryController::goal_callback(
   }
 
   // TODO(denis): is here the following line missing?
-//   add_new_trajectory_msg(std::make_shared(goal->trajectory));
+  //   add_new_trajectory_msg(std::make_shared(goal->trajectory));
 
   RCLCPP_INFO(node_->get_logger(), "Accepted new action goal");
   return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
@@ -1175,26 +1171,33 @@ bool JointTrajectoryController::validate_trajectory_msg(
     const size_t joint_count = trajectory.joint_names.size();
     const auto & points = trajectory.points;
     // TODO(anyone): This currently supports only position, velocity and acceleration inputs
-    if (allow_integration_in_goal_trajectories_) {
+    if (allow_integration_in_goal_trajectories_)
+    {
       const bool all_empty = points[i].positions.empty() && points[i].velocities.empty() &&
-        points[i].accelerations.empty();
-      const bool position_error = !points[i].positions.empty() &&
+                             points[i].accelerations.empty();
+      const bool position_error =
+        !points[i].positions.empty() &&
         !validate_trajectory_point_field(joint_count, points[i].positions, "positions", i, false);
-      const bool velocity_error = !points[i].velocities.empty() &&
+      const bool velocity_error =
+        !points[i].velocities.empty() &&
         !validate_trajectory_point_field(joint_count, points[i].velocities, "velocities", i, false);
-      const bool acceleration_error = !points[i].accelerations.empty() &&
+      const bool acceleration_error =
+        !points[i].accelerations.empty() &&
         !validate_trajectory_point_field(
-        joint_count, points[i].accelerations, "accelerations", i, false);
-      if (all_empty || position_error || velocity_error || acceleration_error) {
+          joint_count, points[i].accelerations, "accelerations", i, false);
+      if (all_empty || position_error || velocity_error || acceleration_error)
+      {
         return false;
       }
-    } else if (
+    }
+    else if (
       !validate_trajectory_point_field(joint_count, points[i].positions, "positions", i, false) ||
       !validate_trajectory_point_field(joint_count, points[i].velocities, "velocities", i, true) ||
       !validate_trajectory_point_field(
         joint_count, points[i].accelerations, "accelerations", i, true) ||
       // TODO(denis): should this be deleted, since effort goals are not supported?
-      !validate_trajectory_point_field(joint_count, points[i].effort, "effort", i, true)) {
+      !validate_trajectory_point_field(joint_count, points[i].effort, "effort", i, true))
+    {
       return false;
     }
   }

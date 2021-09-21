@@ -26,9 +26,11 @@
 #include "control_msgs/msg/joint_trajectory_controller_state.hpp"
 #include "controller_interface/controller_interface.hpp"
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
+#include "joint_limits/joint_limiter_interface.hpp"
 #include "joint_limits/joint_limits.hpp"
 #include "joint_trajectory_controller/tolerances.hpp"
 #include "joint_trajectory_controller/visibility_control.h"
+#include "pluginlib/class_loader.hpp"
 #include "rclcpp/duration.hpp"
 #include "rclcpp/subscription.hpp"
 #include "rclcpp/time.hpp"
@@ -113,6 +115,7 @@ protected:
   std::vector<std::string> joint_names_;
   std::vector<std::string> command_interface_types_;
   std::vector<std::string> state_interface_types_;
+  std::string joint_limiter_type_;
 
   // To reduce number of variables and to make the code shorter the interfaces are ordered in types
   // as the following constants
@@ -129,7 +132,10 @@ protected:
   bool open_loop_control_ = false;
   trajectory_msgs::msg::JointTrajectoryPoint last_commanded_state_;
 
-  std::vector<joint_limits::JointLimits> joint_limits_;
+  // joint limiter
+  using JointLimiter = joint_limits::JointLimiterInterface<joint_limits::JointLimits>;
+  std::shared_ptr<pluginlib::ClassLoader<JointLimiter>> joint_limiter_loader_;
+  std::unique_ptr<JointLimiter> joint_limiter_;
 
   /// Allow integration in goal trajectories to accept goals without position or velocity specified
   bool allow_integration_in_goal_trajectories_ = false;
@@ -177,7 +183,8 @@ protected:
   rclcpp::Publisher<ControllerStateMsg>::SharedPtr publisher_;
   StatePublisherPtr state_publisher_;
 
-  rclcpp::Duration state_publisher_period_ = rclcpp::Duration::from_nanoseconds(RCUTILS_MS_TO_NS(20));
+  rclcpp::Duration state_publisher_period_ =
+    rclcpp::Duration::from_nanoseconds(RCUTILS_MS_TO_NS(20));
   rclcpp::Time last_state_publish_time_;
 
   using FollowJTrajAction = control_msgs::action::FollowJointTrajectory;
@@ -189,7 +196,8 @@ protected:
   bool allow_partial_joints_goal_ = false;
   RealtimeGoalHandleBuffer rt_active_goal_;  ///< Currently active action goal, if any.
   rclcpp::TimerBase::SharedPtr goal_handle_timer_;
-  rclcpp::Duration action_monitor_period_ = rclcpp::Duration::from_nanoseconds(RCUTILS_MS_TO_NS(50));
+  rclcpp::Duration action_monitor_period_ =
+    rclcpp::Duration::from_nanoseconds(RCUTILS_MS_TO_NS(50));
 
   // callbacks for action_server_
   JOINT_TRAJECTORY_CONTROLLER_PUBLIC

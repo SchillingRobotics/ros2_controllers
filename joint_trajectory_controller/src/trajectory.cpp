@@ -60,13 +60,11 @@ void Trajectory::update(std::shared_ptr<trajectory_msgs::msg::JointTrajectory> j
   sampled_already_ = false;
 }
 
-bool
-Trajectory::sample(
-  const rclcpp::Time & sample_time,
-  trajectory_msgs::msg::JointTrajectoryPoint & expected_state,
-  TrajectoryPointConstIter & start_segment_itr,
-  TrajectoryPointConstIter & end_segment_itr,
-  std::vector<joint_limits::JointLimits> joint_limits)
+bool Trajectory::sample(
+  const rclcpp::Time & sample_time, trajectory_msgs::msg::JointTrajectoryPoint & expected_state,
+  TrajectoryPointConstIter & start_segment_itr, TrajectoryPointConstIter & end_segment_itr,
+  const std::unique_ptr<joint_limits::JointLimiterInterface<joint_limits::JointLimits>> &
+    joint_limiter)
 {
   THROW_ON_NULLPTR(trajectory_msg_)
   expected_state = trajectory_msgs::msg::JointTrajectoryPoint();
@@ -95,42 +93,50 @@ Trajectory::sample(
     return false;
   }
 
-  auto deduce_from_derivaties = [&](trajectory_msgs::msg::JointTrajectoryPoint & first_state,
-      trajectory_msgs::msg::JointTrajectoryPoint & second_state,
-      const size_t dim, const double delta_t)
+  auto deduce_from_derivaties = [&](
+                                  trajectory_msgs::msg::JointTrajectoryPoint & first_state,
+                                  trajectory_msgs::msg::JointTrajectoryPoint & second_state,
+                                  const size_t dim, const double delta_t) {
+    if (second_state.positions.empty())
     {
-      if (second_state.positions.empty()) {
-        second_state.positions.resize(dim);
-        if (first_state.velocities.empty()) {
-          first_state.velocities.resize(dim, 0.0);
+      second_state.positions.resize(dim);
+      if (first_state.velocities.empty())
+      {
+        first_state.velocities.resize(dim, 0.0);
+      }
+      if (second_state.velocities.empty())
+      {
+        second_state.velocities.resize(dim);
+        if (first_state.accelerations.empty())
+        {
+          first_state.accelerations.resize(dim, 0.0);
         }
-        if (second_state.velocities.empty()) {
-          second_state.velocities.resize(dim);
-          if (first_state.accelerations.empty()) {
-            first_state.accelerations.resize(dim, 0.0);
-          }
-          for (size_t i = 0; i < dim; ++i) {
-            second_state.velocities[i] = first_state.velocities[i] +
-              (first_state.accelerations[i] + second_state.accelerations[i]) * 0.5 * delta_t;
-          }
-        }
-        for (size_t i = 0; i < dim; ++i) {
-          // second state velocity should be reached on the end of the segment, so use middle
-          second_state.positions[i] = first_state.positions[i] +
-            (first_state.velocities[i] + second_state.velocities[i]) * 0.5 * delta_t;
+        for (size_t i = 0; i < dim; ++i)
+        {
+          second_state.velocities[i] =
+            first_state.velocities[i] +
+            (first_state.accelerations[i] + second_state.accelerations[i]) * 0.5 * delta_t;
         }
       }
-    };
+      for (size_t i = 0; i < dim; ++i)
+      {
+        // second state velocity should be reached on the end of the segment, so use middle
+        second_state.positions[i] =
+          first_state.positions[i] +
+          (first_state.velocities[i] + second_state.velocities[i]) * 0.5 * delta_t;
+      }
+    }
+  };
 
   // current time hasn't reached traj time of the first point in the msg yet
   auto & first_point_in_msg = trajectory_msg_->points[0];
   const rclcpp::Time first_point_timestamp =
     trajectory_start_time_ + first_point_in_msg.time_from_start;
 
-  if (sample_time < first_point_timestamp) {
+  if (sample_time < first_point_timestamp)
+  {
     deduce_from_derivaties(
-      state_before_traj_msg_, first_point_in_msg,
-      state_before_traj_msg_.positions.size(),
+      state_before_traj_msg_, first_point_in_msg, state_before_traj_msg_.positions.size(),
       (first_point_timestamp - time_before_traj_msg_).seconds());
 
     interpolate_between_points(
@@ -141,7 +147,11 @@ Trajectory::sample(
     end_segment_itr = begin();
 
     // This handles joint limits for servo motion
-    enforceJointLimits(joint_limits, state_before_traj_msg_, (sample_time-time_before_traj_msg_).seconds(), expected_state);
+    if (joint_limiter)
+    {
+      joint_limiter->enforce(
+        state_before_traj_msg_, expected_state, (sample_time - time_before_traj_msg_));
+    }
     return true;
   }
 
@@ -159,9 +169,7 @@ Trajectory::sample(
     if (sample_time >= t0 && sample_time < t1)
     {
       deduce_from_derivaties(
-        point, next_point,
-        state_before_traj_msg_.positions.size(),
-        (t1 - t0).seconds());
+        point, next_point, state_before_traj_msg_.positions.size(), (t1 - t0).seconds());
 
       interpolate_between_points(t0, point, t1, next_point, sample_time, expected_state);
 
@@ -180,9 +188,14 @@ Trajectory::sample(
 
   // TODO: Add and test enforceJointLimits? Unsure if needed for end of animation
   // Yes, call enforceJointLimits to handle halting in servo, which has time_from_start == 1ns (does not enforce vel/acc limits)
-  if(last_idx == 0) {
+  if (last_idx == 0)
+  {
     // Enforce limits from current state, not the trajectory's single point, because the point from servo halting violates limits
-    enforceJointLimits(joint_limits, state_before_traj_msg_, (sample_time - time_before_traj_msg_).seconds(), expected_state);
+    if (joint_limiter)
+    {
+      joint_limiter->enforce(
+        state_before_traj_msg_, expected_state, (sample_time - time_before_traj_msg_));
+    }
   }
 
   // the trajectories in msg may have empty velocities/accelerations, so resize them
@@ -196,83 +209,6 @@ Trajectory::sample(
   }
   return true;
 }
-
-void Trajectory::enforceJointLimits(
-  const std::vector<joint_limits::JointLimits> & joint_limits,
-  const trajectory_msgs::msg::JointTrajectoryPoint & state_current,
-  double duration_since_last_call,
-  trajectory_msgs::msg::JointTrajectoryPoint & state_desired)
-{
-  const auto logger = rclcpp::get_logger("trajectory");
-  rclcpp::Clock clock;
-
-  for (auto index = 0u; index < joint_limits.size(); ++index) {
-    if(joint_limits[index].has_velocity_limits) {
-      if(std::abs(state_desired.velocities[index]) > joint_limits[index].max_velocity) {
-        RCLCPP_WARN_STREAM_THROTTLE(logger, clock, ROS_LOG_THROTTLE_PERIOD, "Joint(s) would exceed velocity limits, limiting");
-        state_desired.velocities[index] = copysign(joint_limits[index].max_velocity, state_desired.velocities[index]);
-        double accel = (state_desired.velocities[index] - state_current.velocities[index]) / duration_since_last_call;
-        // Recompute position
-        state_desired.positions[index] = state_current.positions[index] + state_current.velocities[index] * duration_since_last_call + 0.5 * accel * duration_since_last_call * duration_since_last_call;
-      }
-    }
-  }
-
-  // Clamp acclerations to limits
-  for (auto index = 0u; index < joint_limits.size(); ++index) {
-    if(joint_limits[index].has_acceleration_limits) {
-      double accel = (state_desired.velocities[index] - state_current.velocities[index]) / duration_since_last_call;
-      if(std::abs(accel) > joint_limits[index].max_acceleration) {
-        RCLCPP_WARN_STREAM_THROTTLE(logger, clock, ROS_LOG_THROTTLE_PERIOD, "Joint(s) would exceed acceleration limits, limiting");
-        state_desired.velocities[index] = state_current.velocities[index] + copysign(joint_limits[index].max_acceleration, accel) * duration_since_last_call;
-        // Recompute position
-        state_desired.positions[index] = state_current.positions[index] + state_current.velocities[index] * duration_since_last_call + 0.5 * copysign(joint_limits[index].max_acceleration, accel) * duration_since_last_call * duration_since_last_call;
-      }
-    }
-  }
-
-  // Check that stopping distance is within joint limits
-  // - In joint mode, slow down only joints whose stopping distance isn't inside joint limits, at maximum decel
-  // - In Cartesian mode, slow down all joints at maximum decel if any don't have stopping distance within joint limits
-  bool position_limit_triggered = false;
-  for (auto index = 0u; index < joint_limits.size(); ++index) {
-    if(joint_limits[index].has_acceleration_limits) {
-      // delta_x = (v2*v2 - v1*v1) / (2*a)
-      // stopping_distance = (- v1*v1) / (2*max_acceleration)
-      // Here we assume we will not trigger velocity limits while maximally decelerating. This is a valid assumption if we are not currently at a velocity limit since we are just coming to a rest.
-      double stopping_distance = std::abs((- state_desired.velocities[index] * state_desired.velocities[index]) / (2 * joint_limits[index].max_acceleration));
-      // Check that joint limits are beyond stopping_distance and desired_velocity is towards that limit
-      // TODO: Should we consider sign on acceleration here?
-      if ((state_desired.velocities[index] < 0 &&
-           (state_current.positions[index] - joint_limits[index].min_position < stopping_distance)) ||
-          (state_desired.velocities[index] > 0 &&
-           (joint_limits[index].max_position - state_current.positions[index] < stopping_distance))) {
-        RCLCPP_WARN_STREAM_THROTTLE(logger, clock, ROS_LOG_THROTTLE_PERIOD, "Joint(s) would exceed position limits, limiting");
-        position_limit_triggered = true;
-
-        // We will limit all joints
-        break;
-      }
-    }
-  }
-
-  if (position_limit_triggered) {
-    // In Cartesian admittance mode, stop all joints if one would exceed limit
-    for (auto index = 0u; index < joint_limits.size(); ++index) {
-      if(joint_limits[index].has_acceleration_limits) {
-        // Compute accel to stop
-        // Here we aren't explicitly maximally decelerating, but for joints near their limits this should still result in max decel being used
-        double accel_to_stop = -state_current.velocities[index] / duration_since_last_call;
-        double limited_accel = copysign(std::min(std::abs(accel_to_stop), joint_limits[index].max_acceleration), accel_to_stop);
-
-        state_desired.velocities[index] = state_current.velocities[index] + limited_accel * duration_since_last_call;
-        // Recompute position
-        state_desired.positions[index] = state_current.positions[index] + state_current.velocities[index] * duration_since_last_call + 0.5 * limited_accel * duration_since_last_call * duration_since_last_call;
-      }
-    }
-  }
-}
-
 
 void Trajectory::interpolate_between_points(
   const rclcpp::Time & time_a, const trajectory_msgs::msg::JointTrajectoryPoint & state_a,

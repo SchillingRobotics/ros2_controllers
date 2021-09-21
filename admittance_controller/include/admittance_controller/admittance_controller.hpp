@@ -29,12 +29,14 @@
 #include "geometry_msgs/msg/transform_stamped.hpp"
 #include "geometry_msgs/msg/wrench_stamped.hpp"
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
+#include "joint_limits/joint_limiter_interface.hpp"
 #include "joint_limits/joint_limits.hpp"
-#include "semantic_components/force_torque_sensor.hpp"
+#include "pluginlib/class_loader.hpp"
 #include "rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp"
 #include "rclcpp_lifecycle/state.hpp"
 #include "realtime_tools/realtime_buffer.h"
 #include "realtime_tools/realtime_publisher.h"
+#include "semantic_components/force_torque_sensor.hpp"
 // TODO(destogl): this is only temporary to work with servo. It should be either trajectory_msgs/msg/JointTrajectoryPoint or std_msgs/msg/Float64MultiArray
 #include "trajectory_msgs/msg/joint_trajectory.hpp"
 
@@ -75,11 +77,15 @@ protected:
   std::vector<std::string> state_interface_types_;
   std::string ft_sensor_name_;
   bool use_joint_commands_as_input_;
+  std::string joint_limiter_type_;
 
   bool hardware_state_has_offset_;
   trajectory_msgs::msg::JointTrajectoryPoint last_commanded_state_;
 
-  std::vector<joint_limits::JointLimits> joint_limits_;
+  // joint limiter
+  using JointLimiter = joint_limits::JointLimiterInterface<joint_limits::JointLimits>;
+  std::shared_ptr<pluginlib::ClassLoader<JointLimiter>> joint_limiter_loader_;
+  std::unique_ptr<JointLimiter> joint_limiter_;
 
   // Internal variables
   std::unique_ptr<semantic_components::ForceTorqueSensor> force_torque_sensor_;
@@ -93,18 +99,16 @@ protected:
   using ControllerCommandPoseMsg = geometry_msgs::msg::PoseStamped;
   using ControllerCommandJointMsg = trajectory_msgs::msg::JointTrajectory;
 
-  rclcpp::Subscription<ControllerCommandWrenchMsg>::SharedPtr
-  input_wrench_command_subscriber_ = nullptr;
-  rclcpp::Subscription<ControllerCommandPoseMsg>::SharedPtr
-  input_pose_command_subscriber_ = nullptr;
-  rclcpp::Subscription<ControllerCommandJointMsg>::SharedPtr input_joint_command_subscriber_ = nullptr;
+  rclcpp::Subscription<ControllerCommandWrenchMsg>::SharedPtr input_wrench_command_subscriber_ =
+    nullptr;
+  rclcpp::Subscription<ControllerCommandPoseMsg>::SharedPtr input_pose_command_subscriber_ =
+    nullptr;
+  rclcpp::Subscription<ControllerCommandJointMsg>::SharedPtr input_joint_command_subscriber_ =
+    nullptr;
 
-  realtime_tools::RealtimeBuffer<std::shared_ptr<ControllerCommandWrenchMsg>>
-  input_wrench_command_;
-  realtime_tools::RealtimeBuffer<std::shared_ptr<ControllerCommandPoseMsg>>
-  input_pose_command_;
-  realtime_tools::RealtimeBuffer<std::shared_ptr<ControllerCommandJointMsg>>
-  input_joint_command_;
+  realtime_tools::RealtimeBuffer<std::shared_ptr<ControllerCommandWrenchMsg>> input_wrench_command_;
+  realtime_tools::RealtimeBuffer<std::shared_ptr<ControllerCommandPoseMsg>> input_pose_command_;
+  realtime_tools::RealtimeBuffer<std::shared_ptr<ControllerCommandJointMsg>> input_joint_command_;
 
   using ControllerStateMsg = control_msgs::msg::AdmittanceControllerState;
   using ControllerStatePublisher = realtime_tools::RealtimePublisher<ControllerStateMsg>;
@@ -124,7 +128,7 @@ protected:
   // The interfaces are defined as the types in 'allowed_interface_types_' member.
   // For convenience, for each type the interfaces are ordered so that i-th position
   // matches i-th index in joint_names_
-  template<typename T>
+  template <typename T>
   using InterfaceReferences = std::vector<std::vector<std::reference_wrapper<T>>>;
 
   InterfaceReferences<hardware_interface::LoanedCommandInterface> joint_command_interface_;
