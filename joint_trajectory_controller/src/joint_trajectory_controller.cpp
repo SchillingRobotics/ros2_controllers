@@ -813,6 +813,8 @@ JointTrajectoryController::on_activate(const rclcpp_lifecycle::State &)
     last_commanded_state_ = state;
   }
 
+  joint_limiter_->configure(last_commanded_state_);
+
   // TODO(karsten1987): activate subscriptions of subscriber
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }

@@ -485,6 +485,7 @@ CallbackReturn AdmittanceController::on_activate(const rclcpp_lifecycle::State &
   previous_time_ = get_node()->now();
 
   read_state_from_hardware(last_commanded_state_);
+  joint_limiter_->configure(last_commanded_state_);
   // Handle restart of controller by reading last_commanded_state_ from commands if not nan
   read_state_from_command_interfaces(last_commanded_state_);
 
