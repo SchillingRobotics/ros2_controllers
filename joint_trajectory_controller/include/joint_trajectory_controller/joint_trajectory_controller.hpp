@@ -45,6 +45,8 @@
 #include "trajectory_msgs/msg/joint_trajectory.hpp"
 #include "trajectory_msgs/msg/joint_trajectory_point.hpp"
 
+#include "joint_trajectory_controller/trajectory_execution_impl.hpp"
+
 using namespace std::chrono_literals;  // NOLINT
 
 namespace rclcpp_action
@@ -61,7 +63,8 @@ namespace joint_trajectory_controller
 {
 class Trajectory;
 
-class JointTrajectoryController : public controller_interface::ControllerInterface
+class JointTrajectoryController : public controller_interface::ControllerInterface,
+                                  public joint_trajectory_controller::TrajectoryExecutionImpl
 {
 public:
   JOINT_TRAJECTORY_CONTROLLER_PUBLIC
@@ -161,18 +164,6 @@ protected:
   // https://github.com/ros-controls/ros_controllers/blob/noetic-devel/joint_trajectory_controller/include/joint_trajectory_controller/hardware_interface_adapter.h#L283
   bool use_closed_loop_pid_adapter = false;
 
-  // TODO(karsten1987): eventually activate and deactivate subscriber directly when its supported
-  bool subscriber_is_active_ = false;
-  rclcpp::Subscription<trajectory_msgs::msg::JointTrajectory>::SharedPtr joint_command_subscriber_ =
-    nullptr;
-
-  std::shared_ptr<Trajectory> * traj_point_active_ptr_ = nullptr;
-  std::shared_ptr<Trajectory> traj_external_point_ptr_ = nullptr;
-  std::shared_ptr<Trajectory> traj_home_point_ptr_ = nullptr;
-  std::shared_ptr<trajectory_msgs::msg::JointTrajectory> traj_msg_home_ptr_ = nullptr;
-  realtime_tools::RealtimeBuffer<std::shared_ptr<trajectory_msgs::msg::JointTrajectory>>
-    traj_msg_external_point_ptr_;
-
   // The controller should be in halted state after creation otherwise memory corruption
   // TODO(anyone): Is the variable relevant, since we are using lifecycle?
   bool is_halted_ = true;
@@ -186,56 +177,9 @@ protected:
   rclcpp::Duration state_publisher_period_ = rclcpp::Duration::from_nanoseconds(RCUTILS_MS_TO_NS(20));
   rclcpp::Time last_state_publish_time_;
 
-  using FollowJTrajAction = control_msgs::action::FollowJointTrajectory;
-  using RealtimeGoalHandle = realtime_tools::RealtimeServerGoalHandle<FollowJTrajAction>;
-  using RealtimeGoalHandlePtr = std::shared_ptr<RealtimeGoalHandle>;
-  using RealtimeGoalHandleBuffer = realtime_tools::RealtimeBuffer<RealtimeGoalHandlePtr>;
-
-  rclcpp_action::Server<FollowJTrajAction>::SharedPtr action_server_;
   bool allow_partial_joints_goal_ = false;
-  RealtimeGoalHandleBuffer rt_active_goal_;  ///< Currently active action goal, if any.
-  rclcpp::TimerBase::SharedPtr goal_handle_timer_;
-  rclcpp::Duration action_monitor_period_ = rclcpp::Duration::from_nanoseconds(RCUTILS_MS_TO_NS(50));
-
-  // callbacks for action_server_
-  JOINT_TRAJECTORY_CONTROLLER_PUBLIC
-  rclcpp_action::GoalResponse goal_callback(
-    const rclcpp_action::GoalUUID & uuid, std::shared_ptr<const FollowJTrajAction::Goal> goal);
-  JOINT_TRAJECTORY_CONTROLLER_PUBLIC
-  rclcpp_action::CancelResponse cancel_callback(
-    const std::shared_ptr<rclcpp_action::ServerGoalHandle<FollowJTrajAction>> goal_handle);
-  JOINT_TRAJECTORY_CONTROLLER_PUBLIC
-  void feedback_setup_callback(
-    std::shared_ptr<rclcpp_action::ServerGoalHandle<FollowJTrajAction>> goal_handle);
-
-  // fill trajectory_msg so it matches joints controlled by this controller
-  // positions set to current position, velocities, accelerations and efforts to 0.0
-  JOINT_TRAJECTORY_CONTROLLER_PUBLIC
-  void fill_partial_goal(
-    std::shared_ptr<trajectory_msgs::msg::JointTrajectory> trajectory_msg) const;
-  // sorts the joints of the incoming message to our local order
-  JOINT_TRAJECTORY_CONTROLLER_PUBLIC
-  void sort_to_local_joint_order(
-    std::shared_ptr<trajectory_msgs::msg::JointTrajectory> trajectory_msg);
-  JOINT_TRAJECTORY_CONTROLLER_PUBLIC
-  bool validate_trajectory_msg(const trajectory_msgs::msg::JointTrajectory & trajectory) const;
-  JOINT_TRAJECTORY_CONTROLLER_PUBLIC
-  void add_new_trajectory_msg(
-    const std::shared_ptr<trajectory_msgs::msg::JointTrajectory> & traj_msg);
-  JOINT_TRAJECTORY_CONTROLLER_PUBLIC
-  bool validate_trajectory_point_field(
-    size_t joint_names_size, const std::vector<double> & vector_field,
-    const std::string & string_for_vector_field, size_t i, bool allow_empty) const;
 
   SegmentTolerances default_tolerances_;
-
-  JOINT_TRAJECTORY_CONTROLLER_PUBLIC
-  void preempt_active_goal();
-  JOINT_TRAJECTORY_CONTROLLER_PUBLIC
-  void set_hold_position();
-
-  JOINT_TRAJECTORY_CONTROLLER_PUBLIC
-  bool reset();
 
   using JointTrajectoryPoint = trajectory_msgs::msg::JointTrajectoryPoint;
   JOINT_TRAJECTORY_CONTROLLER_PUBLIC
@@ -250,9 +194,6 @@ protected:
 private:
   bool contains_interface_type(
     const std::vector<std::string> & interface_type_list, const std::string & interface_type);
-
-  void resize_joint_trajectory_point(
-    trajectory_msgs::msg::JointTrajectoryPoint & point, size_t size);
 };
 
 }  // namespace joint_trajectory_controller
