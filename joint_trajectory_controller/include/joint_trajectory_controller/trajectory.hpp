@@ -18,6 +18,7 @@
 #include <memory>
 #include <vector>
 
+#include "joint_limits/joint_limiter_interface.hpp"
 #include "joint_limits/joint_limits.hpp"
 #include "joint_trajectory_controller/visibility_control.h"
 #include "rclcpp/time.hpp"
@@ -81,20 +82,11 @@ public:
    * \param[out] end_segment_itr Iterator to the end segment for given \p sample_time. See description above.
    */
   JOINT_TRAJECTORY_CONTROLLER_PUBLIC
-  bool
-  sample(
-    const rclcpp::Time & sample_time,
-    trajectory_msgs::msg::JointTrajectoryPoint & expected_state,
-    TrajectoryPointConstIter & start_segment_itr,
-    TrajectoryPointConstIter & end_segment_itr,
-    std::vector<joint_limits::JointLimits> joint_limits={});
-
-  JOINT_TRAJECTORY_CONTROLLER_PUBLIC
-  void enforceJointLimits(
-    const std::vector<joint_limits::JointLimits> & joint_limits,
-    const trajectory_msgs::msg::JointTrajectoryPoint & state_current,
-    double duration_since_last_call,
-    trajectory_msgs::msg::JointTrajectoryPoint & state_desired);
+  bool sample(
+    const rclcpp::Time & sample_time, trajectory_msgs::msg::JointTrajectoryPoint & expected_state,
+    TrajectoryPointConstIter & start_segment_itr, TrajectoryPointConstIter & end_segment_itr,
+    const std::unique_ptr<joint_limits::JointLimiterInterface<joint_limits::JointLimits>> &
+      joint_limiter = nullptr);
 
   /**
    * Do interpolation between 2 states given a time in between their respective timestamps

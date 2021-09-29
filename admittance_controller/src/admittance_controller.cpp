@@ -16,10 +16,11 @@
 
 #include "admittance_controller/admittance_controller.hpp"
 
+#include <math.h>
 #include <chrono>
 #include <functional>
 #include <limits>
-#include <math.h>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -31,8 +32,8 @@
 #include "filters/filter_chain.hpp"
 #include "geometry_msgs/msg/wrench.hpp"
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
-#include "joint_limits/joint_limits.hpp"
 #include "joint_limits/joint_limits_rosparam.hpp"
+#include "rcutils/logging_macros.h"
 #include "trajectory_msgs/msg/joint_trajectory_point.hpp"
 
 constexpr size_t ROS_LOG_THROTTLE_PERIOD = 1 * 1000;  // Milliseconds to throttle logs inside loops
@@ -55,6 +56,7 @@ CallbackReturn AdmittanceController::on_init()
     auto_declare<std::string>("ft_sensor_name", "");
     auto_declare<bool>("use_joint_commands_as_input", false);
     auto_declare<bool>("open_loop_control", false);
+    auto_declare<std::string>("joint_limiter_type", "joint_limits/SimpleJointLimiter");
 
     auto_declare<std::string>("IK.base", "");
     // TODO(destogl): enable when IK-plugin support is added
@@ -171,6 +173,7 @@ CallbackReturn AdmittanceController::on_configure(
     get_string_param_and_error_if_empty(ft_sensor_name_, "ft_sensor_name") ||
     get_bool_param_and_error_if_empty(use_joint_commands_as_input_, "use_joint_commands_as_input") ||
     get_bool_param_and_error_if_empty(admittance_->open_loop_control_, "open_loop_control") ||
+    get_string_param_and_error_if_empty(joint_limiter_type_, "joint_limiter_type") ||
     get_string_param_and_error_if_empty(admittance_->ik_base_frame_, "IK.base") ||
     get_string_param_and_error_if_empty(admittance_->ik_group_name_, "IK.group_name") ||
     get_string_param_and_error_if_empty(admittance_->control_frame_, "control_frame") ||
@@ -307,19 +310,20 @@ CallbackReturn AdmittanceController::on_configure(
   auto num_joints = joint_names_.size();
 
   // Initialize joint limits
-  joint_limits_.resize(num_joints);
-  for (auto i = 0ul; i < num_joints; ++i) {
-    joint_limits::declare_parameters(joint_names_[i], get_node());
-    joint_limits::get_joint_limits(joint_names_[i], get_node(), joint_limits_[i]);
-    RCLCPP_INFO(get_node()->get_logger(), "Joint '%s':\n  has position limits: %s [%e, %e]"
-                "\n  has velocity limits: %s [%e]\n  has acceleration limits: %s [%e]",
-                joint_names_[i].c_str(), joint_limits_[i].has_position_limits ? "true" : "false",
-                joint_limits_[i].min_position, joint_limits_[i].max_position,
-                joint_limits_[i].has_velocity_limits ? "true" : "false",
-                joint_limits_[i].max_velocity,
-                joint_limits_[i].has_acceleration_limits ? "true" : "false",
-                joint_limits_[i].max_acceleration
-               );
+  if (!joint_limiter_type_.empty())
+  {
+    RCLCPP_INFO(
+      get_node()->get_logger(), "Using joint limiter plugin: '%s'", joint_limiter_type_.c_str());
+    joint_limiter_loader_ = std::make_shared<pluginlib::ClassLoader<JointLimiter>>(
+      "joint_limits", "joint_limits::JointLimiterInterface<joint_limits::JointLimits>");
+    joint_limiter_ = std::unique_ptr<JointLimiter>(
+      joint_limiter_loader_->createUnmanagedInstance(joint_limiter_type_));
+    joint_limiter_->init(joint_names_, get_node());
+  }
+  else
+  {
+    RCLCPP_INFO(
+      get_node()->get_logger(), "Not using joint limiter plugin as none defined.");
   }
 
   // Initialize FTS semantic semantic_component
@@ -459,6 +463,10 @@ CallbackReturn AdmittanceController::on_activate(const rclcpp_lifecycle::State &
   previous_time_ = get_node()->now();
 
   read_state_from_hardware(last_commanded_state_);
+  if (joint_limiter_)
+  {
+    joint_limiter_->configure(last_commanded_state_);
+  }
   // Handle restart of controller by reading last_commanded_state_ from commands if not nan
   read_state_from_command_interfaces(last_commanded_state_);
 
@@ -574,79 +582,10 @@ controller_interface::return_type AdmittanceController::update()
 //   }
   previous_time_ = get_node()->now();
 
-  // TODO: Replace with limit plugin
-  if(current_joint_states.velocities.empty()) {
-    // First update() after activating does not have velocity available, assume 0
-    current_joint_states.velocities.resize(num_joints, 0.0);
+  if (joint_limiter_)
+  {
+    joint_limiter_->enforce(current_joint_states, desired_joint_states, duration_since_last_call);
   }
-
-  // Clamp velocities to limits
-  for (auto index = 0u; index < num_joints; ++index) {
-    if(joint_limits_[index].has_velocity_limits) {
-      if(std::abs(desired_joint_states.velocities[index]) > joint_limits_[index].max_velocity) {
-        RCLCPP_WARN_STREAM_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(), ROS_LOG_THROTTLE_PERIOD, "Joint(s) would exceed velocity limits, limiting");
-        desired_joint_states.velocities[index] = copysign(joint_limits_[index].max_velocity, desired_joint_states.velocities[index]);
-        double accel = (desired_joint_states.velocities[index] - current_joint_states.velocities[index]) / duration_since_last_call.seconds();
-        // Recompute position
-        desired_joint_states.positions[index] = current_joint_states.positions[index] + current_joint_states.velocities[index] * duration_since_last_call.seconds() + 0.5 * accel * duration_since_last_call.seconds() * duration_since_last_call.seconds();
-      }
-    }
-  }
-
-  // Clamp acclerations to limits
-  for (auto index = 0u; index < num_joints; ++index) {
-    if(joint_limits_[index].has_acceleration_limits) {
-      double accel = (desired_joint_states.velocities[index] - current_joint_states.velocities[index]) / duration_since_last_call.seconds();
-      if(std::abs(accel) > joint_limits_[index].max_acceleration) {
-        RCLCPP_WARN_STREAM_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(), ROS_LOG_THROTTLE_PERIOD, "Joint(s) would exceed acceleration limits, limiting");
-        desired_joint_states.velocities[index] = current_joint_states.velocities[index] + copysign(joint_limits_[index].max_acceleration, accel) * duration_since_last_call.seconds();
-        // Recompute position
-        desired_joint_states.positions[index] = current_joint_states.positions[index] + current_joint_states.velocities[index] * duration_since_last_call.seconds() + 0.5 * copysign(joint_limits_[index].max_acceleration, accel) * duration_since_last_call.seconds() * duration_since_last_call.seconds();
-      }
-    }
-  }
-
-  // Check that stopping distance is within joint limits
-  // - In joint mode, slow down only joints whose stopping distance isn't inside joint limits, at maximum decel
-  // - In Cartesian mode, slow down all joints at maximum decel if any don't have stopping distance within joint limits
-  bool position_limit_triggered = false;
-  for (auto index = 0u; index < num_joints; ++index) {
-    if(joint_limits_[index].has_acceleration_limits) {
-      // delta_x = (v2*v2 - v1*v1) / (2*a)
-      // stopping_distance = (- v1*v1) / (2*max_acceleration)
-      // Here we assume we will not trigger velocity limits while maximally decelerating. This is a valid assumption if we are not currently at a velocity limit since we are just coming to a rest.
-      double stopping_distance = std::abs((- desired_joint_states.velocities[index] * desired_joint_states.velocities[index]) / (2 * joint_limits_[index].max_acceleration));
-      // Check that joint limits are beyond stopping_distance and desired_velocity is towards that limit
-      // TODO: Should we consider sign on acceleration here?
-      if ((desired_joint_states.velocities[index] < 0 &&
-           (current_joint_states.positions[index] - joint_limits_[index].min_position < stopping_distance)) ||
-          (desired_joint_states.velocities[index] > 0 &&
-           (joint_limits_[index].max_position - current_joint_states.positions[index] < stopping_distance))) {
-        RCLCPP_WARN_STREAM_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(), ROS_LOG_THROTTLE_PERIOD, "Joint(s) would exceed position limits, limiting");
-        position_limit_triggered = true;
-
-        // We will limit all joints
-        break;
-      }
-    }
-  }
-
-  if (position_limit_triggered) {
-    // In Cartesian admittance mode, stop all joints if one would exceed limit
-    for (auto index = 0u; index < num_joints; ++index) {
-      if(joint_limits_[index].has_acceleration_limits) {
-        // Compute accel to stop
-        // Here we aren't explicitly maximally decelerating, but for joints near their limits this should still result in max decel being used
-        double accel_to_stop = -current_joint_states.velocities[index] / duration_since_last_call.seconds();
-        double limited_accel = copysign(std::min(std::abs(accel_to_stop), joint_limits_[index].max_acceleration), accel_to_stop);
-
-        desired_joint_states.velocities[index] = current_joint_states.velocities[index] + limited_accel * duration_since_last_call.seconds();
-        // Recompute position
-        desired_joint_states.positions[index] = current_joint_states.positions[index] + current_joint_states.velocities[index] * duration_since_last_call.seconds() + 0.5 * limited_accel * duration_since_last_call.seconds() * duration_since_last_call.seconds();
-      }
-    }
-  }
-  // End limit plugin
 
   // Write new joint angles to the robot
   for (auto index = 0u; index < num_joints; ++index) {
@@ -781,8 +720,6 @@ bool AdmittanceController::read_state_from_command_interfaces(
 }  // namespace admittance_controller
 
 #include "pluginlib/class_list_macros.hpp"
-#include <angles/angles.h>
-#include <angles/angles.h>
 
 PLUGINLIB_EXPORT_CLASS(
   admittance_controller::AdmittanceController,

@@ -61,6 +61,7 @@ JointTrajectoryController::on_init()
     auto_declare<std::vector<std::string>>("joints", joint_names_);
     auto_declare<std::vector<std::string>>("command_interfaces", command_interface_types_);
     auto_declare<std::vector<std::string>>("state_interfaces", state_interface_types_);
+    auto_declare<std::string>("joint_limiter_type", "joint_limits/SimpleJointLimiter");
     auto_declare<double>("state_publish_rate", 50.0);
     auto_declare<double>("action_monitor_rate", 20.0);
     auto_declare<bool>("allow_partial_joints_goal", allow_partial_joints_goal_);
@@ -185,7 +186,7 @@ controller_interface::return_type JointTrajectoryController::update()
     TrajectoryPointConstIter start_segment_itr, end_segment_itr;
     const bool valid_point =
       (*traj_point_active_ptr_)
-        ->sample(node_->now(), state_desired, start_segment_itr, end_segment_itr, joint_limits_);
+        ->sample(node_->now(), state_desired, start_segment_itr, end_segment_itr, joint_limiter_);
 
     if (valid_point)
     {
@@ -616,22 +617,23 @@ JointTrajectoryController::on_configure(const rclcpp_lifecycle::State &)
     get_interface_list(command_interface_types_).c_str(),
     get_interface_list(state_interface_types_).c_str());
 
-  const auto n_joints = joint_names_.size();
+  joint_limiter_type_ = get_node()->get_parameter("joint_limiter_type").get_value<std::string>();
 
   // Initialize joint limits
-  joint_limits_.resize(n_joints);
-  for (auto i = 0ul; i < n_joints; ++i) {
-    joint_limits::declare_parameters(joint_names_[i], get_node());
-    joint_limits::get_joint_limits(joint_names_[i], get_node(), joint_limits_[i]);
-    RCLCPP_INFO(get_node()->get_logger(), "Joint '%s':\n  has position limits: %s [%e, %e]"
-                "\n  has velocity limits: %s [%e]\n  has acceleration limits: %s [%e]",
-                joint_names_[i].c_str(), joint_limits_[i].has_position_limits ? "true" : "false",
-                joint_limits_[i].min_position, joint_limits_[i].max_position,
-                joint_limits_[i].has_velocity_limits ? "true" : "false",
-                joint_limits_[i].max_velocity,
-                joint_limits_[i].has_acceleration_limits ? "true" : "false",
-                joint_limits_[i].max_acceleration
-               );
+  if (!joint_limiter_type_.empty())
+  {
+    RCLCPP_INFO(
+      get_node()->get_logger(), "Using joint limiter plugin: '%s'", joint_limiter_type_.c_str());
+    joint_limiter_loader_ = std::make_shared<pluginlib::ClassLoader<JointLimiter>>(
+      "joint_limits", "joint_limits::JointLimiterInterface<joint_limits::JointLimits>");
+    joint_limiter_ = std::unique_ptr<JointLimiter>(
+      joint_limiter_loader_->createUnmanagedInstance(joint_limiter_type_));
+    joint_limiter_->init(joint_names_, get_node());
+  }
+  else
+  {
+    RCLCPP_INFO(
+      get_node()->get_logger(), "Not using joint limiter plugin as none defined.");
   }
 
   default_tolerances_ = get_segment_tolerances(*node_, joint_names_);
@@ -679,6 +681,8 @@ JointTrajectoryController::on_configure(const rclcpp_lifecycle::State &)
 
   publisher_ = node_->create_publisher<ControllerStateMsg>("~/state", rclcpp::SystemDefaultsQoS());
   state_publisher_ = std::make_unique<StatePublisher>(publisher_);
+
+  const auto n_joints = joint_names_.size();
 
   state_publisher_->lock();
   state_publisher_->msg_.joint_names = joint_names_;
@@ -815,6 +819,11 @@ JointTrajectoryController::on_activate(const rclcpp_lifecycle::State &)
   if (read_state_from_command_interfaces(state))
   {
     last_commanded_state_ = state;
+  }
+
+  if (joint_limiter_)
+  {
+    joint_limiter_->configure(last_commanded_state_);
   }
 
   // TODO(karsten1987): activate subscriptions of subscriber
