@@ -338,6 +338,8 @@ CallbackReturn AdmittanceController::on_configure(
   auto num_joints = joint_names_.size();
 
   // Initialize joint limits
+  RCLCPP_INFO(
+    get_node()->get_logger(), "Using joint limiter plugin: '%s'", joint_limiter_type_.c_str());
   joint_limiter_loader_ = std::make_shared<pluginlib::ClassLoader<JointLimiter>>(
     "joint_limits", "joint_limits::JointLimiterInterface<joint_limits::JointLimits>");
   joint_limiter_ = std::unique_ptr<JointLimiter>(
