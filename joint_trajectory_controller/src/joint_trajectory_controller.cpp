@@ -652,12 +652,8 @@ JointTrajectoryController::on_configure(const rclcpp_lifecycle::State &)
     RCLCPP_INFO(logger, "Goals with partial set of joints are allowed");
   }
 
-  const double action_monitor_rate =
-    node_->get_parameter("action_monitor_rate").get_value<double>();
-
-  create_action_server(
-    node_, this, action_monitor_rate, allow_partial_joints_goal_, joint_names_,
-    allow_integration_in_goal_trajectories_);
+  // const double action_monitor_rate =
+  //   node_->get_parameter("action_monitor_rate").get_value<double>();
 
   RCLCPP_INFO(get_node()->get_logger(), "configure successful");
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
@@ -760,6 +756,13 @@ JointTrajectoryController::on_activate(const rclcpp_lifecycle::State &)
   {
     joint_limiter_->configure(last_commanded_state_);
   }
+  
+  const double action_monitor_rate =
+    node_->get_parameter("action_monitor_rate").get_value<double>();
+
+  create_action_server(
+    node_, this, action_monitor_rate, allow_partial_joints_goal_, joint_names_,
+    allow_integration_in_goal_trajectories_);
 
   // TODO(karsten1987): activate subscriptions of subscriber
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
@@ -781,6 +784,8 @@ JointTrajectoryController::on_deactivate(const rclcpp_lifecycle::State &)
     joint_state_interface_[index].clear();
   }
   release_interfaces();
+
+  release_action_server();
 
   subscriber_is_active_ = false;
 

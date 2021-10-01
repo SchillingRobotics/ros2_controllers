@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// #include "joint_trajectory_controller/joint_trajectory_controller.hpp"
-
 #ifndef JOINT_TRAJECTORY_CONTROLLER__TRAJECTORY_EXECUTION_IMPL_HPP_
 #define JOINT_TRAJECTORY_CONTROLLER__TRAJECTORY_EXECUTION_IMPL_HPP_
 
@@ -56,10 +54,6 @@ static const rclcpp::Logger LOGGER = rclcpp::get_logger("trajectory_execution_im
 
 class TrajectoryExecutionImpl
 {
-public:
-  // TrajectoryExecutionImpl(const rclcpp::Node::SharedPtr& node)
-  //   : node_(node) {}
-
 protected:
   using FollowJTrajAction = control_msgs::action::FollowJointTrajectory;
   using RealtimeGoalHandle = realtime_tools::RealtimeServerGoalHandle<FollowJTrajAction>;
@@ -130,7 +124,8 @@ protected:
   bool sample_trajectory(
     const rclcpp::Time & now, trajectory_msgs::msg::JointTrajectoryPoint & state_desired,
     TrajectoryPointConstIter & start_segment_itr, TrajectoryPointConstIter & end_segment_itr,
-    std::unique_ptr<JointLimiter> & joint_limiter)
+    const std::unique_ptr<joint_limits::JointLimiterInterface<joint_limits::JointLimits>> &
+      joint_limiter = nullptr)
   {
     return (*traj_point_active_ptr_)
       ->sample(now, state_desired, start_segment_itr, end_segment_itr, joint_limiter);
@@ -233,7 +228,7 @@ protected:
     if (
       controller_interface->get_state().id() == lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE)
     {
-      RCLCPP_ERROR(LOGGER, "Can't accept new action goals. Controller is not running.");
+      RCLCPP_ERROR_STREAM(LOGGER, "Can't accept new action goals. Controller is not running. It is " << controller_interface->get_state().label());
       return rclcpp_action::GoalResponse::REJECT;
     }
 
@@ -324,6 +319,10 @@ protected:
       std::bind(
         &TrajectoryExecutionImpl::feedback_setup_callback, this, std::placeholders::_1, node,
         joint_names, action_monitor_period));
+  }
+
+  void release_action_server() {
+    action_server_.reset();
   }
 
   void fill_partial_goal(
