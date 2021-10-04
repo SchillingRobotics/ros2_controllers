@@ -17,16 +17,19 @@
 #ifndef ADMITTANCE_CONTROLLER__ADMITTANCE_RULE_HPP_
 #define ADMITTANCE_CONTROLLER__ADMITTANCE_RULE_HPP_
 
-#include "angles/angles.h"
+#include <map>
 
+#include "angles/angles.h"
 #include "admittance_controller/moveit_kinematics.hpp"
 #include "control_msgs/msg/admittance_controller_state.hpp"
 #include "controller_interface/controller_interface.hpp"
+#include "controller_interface/controller_parameters.hpp"
 #include "filters/filter_chain.hpp"
 #include "geometry_msgs/msg/quaternion.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/transform_stamped.hpp"
 #include "geometry_msgs/msg/wrench_stamped.hpp"
+#include "rcutils/logging_macros.h"
 #include "tf2_ros/transform_listener.h"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
 #include <tf2_ros/buffer.h>
@@ -163,17 +166,195 @@ void convert_array_to_message(const Type & vector, geometry_msgs::msg::Transform
 
 }  // utility namespace
 
-
 namespace admittance_controller
 {
-struct GravityCompensationParameters
+
+class AdmittanceParameters : public controller_interface::ControllerParameters
 {
 public:
-  std::string world_frame_;
+  AdmittanceParameters() : controller_interface::ControllerParameters(7, 24, 4)
+  {
+    add_string_parameter("IK.base", false);
+    add_string_parameter("IK.group_name", false);
+    add_string_parameter("control_frame", true);
+    add_string_parameter("sensor_frame", false);
+
+    add_bool_parameter("open_loop_control", true);
+
+    add_bool_parameter("admittance.selected_axes.x", true);
+    add_bool_parameter("admittance.selected_axes.y", true);
+    add_bool_parameter("admittance.selected_axes.z", true);
+    add_bool_parameter("admittance.selected_axes.rx", true);
+    add_bool_parameter("admittance.selected_axes.ry", true);
+    add_bool_parameter("admittance.selected_axes.rz", true);
+
+    add_double_parameter("admittance.mass.x", true);
+    add_double_parameter("admittance.mass.y", true);
+    add_double_parameter("admittance.mass.z", true);
+    add_double_parameter("admittance.mass.rx", true);
+    add_double_parameter("admittance.mass.ry", true);
+    add_double_parameter("admittance.mass.rz", true);
+    add_double_parameter("admittance.stiffness.x", true);
+    add_double_parameter("admittance.stiffness.y", true);
+    add_double_parameter("admittance.stiffness.z", true);
+    add_double_parameter("admittance.stiffness.rx", true);
+    add_double_parameter("admittance.stiffness.ry", true);
+    add_double_parameter("admittance.stiffness.rz", true);
+    add_double_parameter("admittance.damping.x", true);
+    add_double_parameter("admittance.damping.y", true);
+    add_double_parameter("admittance.damping.z", true);
+    add_double_parameter("admittance.damping.rx", true);
+    add_double_parameter("admittance.damping.ry", true);
+    add_double_parameter("admittance.damping.rz", true);
+    add_double_parameter("admittance.damping_ratio.x", true);
+    add_double_parameter("admittance.damping_ratio.y", true);
+    add_double_parameter("admittance.damping_ratio.z", true);
+    add_double_parameter("admittance.damping_ratio.rx", true);
+    add_double_parameter("admittance.damping_ratio.ry", true);
+    add_double_parameter("admittance.damping_ratio.rz", true);
+  }
+
+  bool check_if_parameters_are_valid() override
+  {
+    bool ret = true;
+
+    // Check if any string parameter is empty
+    ret = !empty_parameter_in_list(string_parameters_);
+
+    int index = 0;
+    int offset_index_bool = 1;
+    // check if parameters are all properly set for selected axes
+    for (auto i = 0ul; i < 6; ++i) {
+      if (bool_parameters_[offset_index_bool + i].second)
+      {
+        // check mass parameters
+        index = i;
+        if (std::isnan(double_parameters_[index].second))
+        {
+          RCUTILS_LOG_ERROR_NAMED(
+            logger_name_.c_str(),
+            "Parameter '%s' has to be set", double_parameters_[index].first.name.c_str());
+          ret = false;
+        }
+        // Check stiffness parameters
+        index = i + 6;
+        if (std::isnan(double_parameters_[index].second))
+        {
+          RCUTILS_LOG_ERROR_NAMED(
+            logger_name_.c_str(),
+            "Parameter '%s' has to be set", double_parameters_[index].first.name.c_str());
+          ret = false;
+        }
+        // Check damping or damping_ratio parameters
+        index = i + 12;
+        if (std::isnan(double_parameters_[index].second) &&
+            std::isnan(double_parameters_[index + 6].second))
+        {
+          RCUTILS_LOG_ERROR_NAMED(
+            logger_name_.c_str(),
+            "Either parameter '%s' of '%s' has to be set",
+            double_parameters_[index].first.name.c_str(),
+            double_parameters_[index + 6].first.name.c_str()
+          );
+          ret = false;
+        }
+      }
+    }
+
+    return ret;
+  }
+
+  /**
+   * Conversion to damping when damping_ratio (zeta) parameter is used.
+   * Using formula: D = damping_ratio * 2 * sqrt( M * S )
+   */
+  void convert_damping_ratio_to_damping()
+  {
+    for (auto i = 0ul; i < damping_ratio_.size(); ++i)
+    {
+      if (!std::isnan( damping_ratio_[i]))
+      {
+        damping_[i] = damping_ratio_[i] * 2 * sqrt(mass_[i] * stiffness_[i]);
+      }
+      else
+      {
+        RCUTILS_LOG_DEBUG_NAMED(
+          logger_name_.c_str(),
+          "Damping ratio for axis %zu not used because it is NaN.", i);
+      }
+    }
+  }
+
+  void update() override
+  {
+    ik_base_frame_ = string_parameters_[0].second;
+    RCUTILS_LOG_INFO_NAMED(
+        logger_name_.c_str(),
+       "IK Base frame: %s", ik_base_frame_.c_str());
+    ik_group_name_ = string_parameters_[1].second;
+    RCUTILS_LOG_INFO_NAMED(
+        logger_name_.c_str(),
+       "IK group name frame: %s", ik_group_name_.c_str());
+    control_frame_ = string_parameters_[2].second;
+    RCUTILS_LOG_INFO_NAMED(
+        logger_name_.c_str(),
+       "Control frame: %s", control_frame_.c_str());
+    sensor_frame_ = string_parameters_[3].second;
+    RCUTILS_LOG_INFO_NAMED(
+        logger_name_.c_str(),
+       "Sensor frame: %s", sensor_frame_.c_str());
+
+    open_loop_control_ = bool_parameters_[0].second;
+    RCUTILS_LOG_INFO_NAMED(
+        logger_name_.c_str(),
+       "Using open loop: %s", (open_loop_control_ ? "True" : "False"));
+
+    for (auto i = 0ul; i < 6; ++i)
+    {
+      selected_axes_[i] = bool_parameters_[i+1].second; // +1 because there is already one parameter
+      RCUTILS_LOG_INFO_NAMED(
+        logger_name_.c_str(),
+       "Axis %zu is %sselected", i, (selected_axes_[i] ? "" : "not "));
+
+      mass_[i] = double_parameters_[i].second;
+      RCUTILS_LOG_INFO_NAMED(
+        logger_name_.c_str(),
+       "Mass for the axis %zu is %e", i, mass_[i]);
+      stiffness_[i] = double_parameters_[i+6].second;
+      RCUTILS_LOG_INFO_NAMED(
+        logger_name_.c_str(),
+       "Stiffness for the axis %zu is %e", i, stiffness_[i]);
+      damping_[i] = double_parameters_[i+12].second;
+      RCUTILS_LOG_INFO_NAMED(
+        logger_name_.c_str(),
+        "Damping for the axis %zu is %e", i, damping_[i]);
+      damping_ratio_[i] = double_parameters_[i+18].second;
+      RCUTILS_LOG_INFO_NAMED(
+        logger_name_.c_str(),
+       "Damping_ratio for the axis %zu is %e", i, damping_ratio_[i]);
+    }
+
+    convert_damping_ratio_to_damping();
+  }
+
+  // IK parameters
+  std::string ik_base_frame_;
+  std::string ik_group_name_;
+  // Admittance calculations (displacement etc) are done in this frame.
+  // Frame where wrench measurements are taken
   std::string sensor_frame_;
-  geometry_msgs::msg::Vector3Stamped cog_;
-  double force_;
+  // Depends on the scenario: usually base_link, tool or end-effector
+  std::string control_frame_;
+
+  bool open_loop_control_;
+
+  std::array<double, 6> damping_;
+  std::array<double, 6> damping_ratio_;
+  std::array<double, 6> mass_;
+  std::array<bool, 6> selected_axes_;
+  std::array<double, 6> stiffness_;
 };
+
 
 class AdmittanceRule
 {
@@ -215,32 +396,9 @@ public:
 
   controller_interface::return_type get_pose_of_control_frame_in_base_frame(geometry_msgs::msg::PoseStamped & pose);
 
-  /**
-   * Conversion to damping when damping_ratio (zeta) parameter is used.
-   * Using formula: D = damping_ratio * 2 * sqrt( M * S )
-   */
-  void convert_damping_ratio_to_damping() {
-    for (auto i = 0ul; i < damping_ratio_.size(); ++i) {
-      if (!std::isnan(damping_ratio_[i])) {
-        damping_[i] = damping_ratio_[i] * 2 * sqrt(mass_[i] * stiffness_[i]);
-      }
-    }
-  }
-
 public:
-  bool open_loop_control_ = false;
   // TODO(destogl): Add parameter for this
   bool feedforward_commanded_input_ = true;
-
-  // IK related parameters
-  std::string ik_base_frame_;
-  std::string ik_group_name_;
-
-  // Admittance calculations (displacement etc) are done in this frame.
-  // Depends on the scenario: usually base_link, tool or end-effector
-  std::string control_frame_;
-  // Frame where wrench measurements are taken
-  std::string sensor_frame_;
 
   // An identity matrix is needed in several places
   geometry_msgs::msg::TransformStamped identity_transform_;
@@ -248,11 +406,9 @@ public:
   // Admittance parameters
   // TODO(destogl): unified mode does not have to be here
   bool unified_mode_ = false;  // Unified mode enables simultaneous force and position goals
-  std::array<bool, 6> selected_axes_;
-  std::array<double, 6> mass_;
-  std::array<double, 6> damping_;
-  std::array<double, 6> damping_ratio_;
-  std::array<double, 6> stiffness_;
+
+  // Dynamic admittance parameters
+  AdmittanceParameters parameters_;
 
   // Filter chain for Wrench data
   std::unique_ptr<filters::FilterChain<geometry_msgs::msg::WrenchStamped>> filter_chain_;
@@ -347,14 +503,14 @@ private:
   controller_interface::return_type
   transform_to_control_frame(const MsgType & message_in, MsgType & message_out)
   {
-    return transform_to_frame(message_in, message_out, control_frame_);
+    return transform_to_frame(message_in, message_out, parameters_.control_frame_);
   }
 
   template<typename MsgType>
   controller_interface::return_type
   transform_to_ik_base_frame(const MsgType & message_in, MsgType & message_out)
   {
-    return transform_to_frame(message_in, message_out, ik_base_frame_);
+    return transform_to_frame(message_in, message_out, parameters_.ik_base_frame_);
   }
 
   template<typename MsgType>
@@ -381,14 +537,14 @@ private:
   controller_interface::return_type
   transform_relative_to_control_frame(const MsgType & message_in, MsgType & message_out)
   {
-    return transform_relative_to_frame(message_in, message_out, control_frame_);
+    return transform_relative_to_frame(message_in, message_out, parameters_.control_frame_);
   }
 
   template<typename MsgType>
   controller_interface::return_type
   transform_relative_to_ik_base_frame(const MsgType & message_in, MsgType & message_out)
   {
-    return transform_relative_to_frame(message_in, message_out, ik_base_frame_);
+    return transform_relative_to_frame(message_in, message_out, parameters_.ik_base_frame_);
   }
 
   /**
