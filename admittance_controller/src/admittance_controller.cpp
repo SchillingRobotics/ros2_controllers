@@ -409,10 +409,6 @@ CallbackReturn AdmittanceController::on_configure(
   const double action_monitor_rate =
     node_->get_parameter("action_monitor_rate").get_value<double>();
 
-  create_action_server(
-    node_, this, action_monitor_rate, allow_partial_joints_goal_, joint_names_,
-    allow_integration_in_goal_trajectories_);
-
   RCLCPP_INFO(get_node()->get_logger(), "configure successful");
   return CallbackReturn::SUCCESS;
 }
