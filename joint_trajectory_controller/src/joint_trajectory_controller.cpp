@@ -244,7 +244,6 @@ controller_interface::return_type JointTrajectoryController::update()
         before_last_point, abort, outside_goal_state_tolerance,
         default_tolerances_.goal_time_tolerance, node_->now(), joint_names_, state_current,
         state_desired, state_error, start_segment_itr);
-      const auto active_goal = *rt_active_goal_.readFromRT();
     }
   }
   else {

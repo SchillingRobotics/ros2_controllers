@@ -664,6 +664,8 @@ controller_interface::return_type AdmittanceController::update()
   bool valid_trajectory_point = false;
   // Used only when we have a valid trajectory
   bool before_last_point = false;
+  bool abort = false;
+  bool outside_goal_state_tolerance = false;
   joint_trajectory_controller::TrajectoryPointConstIter start_segment_itr, end_segment_itr;
 
   // currently carrying out a trajectory
@@ -745,11 +747,32 @@ controller_interface::return_type AdmittanceController::update()
       error.accelerations[index] = desired.accelerations[index] - current.accelerations[index];
     }
   };
+
   for (auto index = 0ul; index < joint_num; ++index)
   {
     compute_error_for_joint(state_error, index, state_current, state_desired);
+
+    // Check if trajectory is complete or should be aborted
+    if(valid_trajectory_point) {
+      if (
+        before_last_point &&
+        !check_state_tolerance_per_joint(
+          state_error, index, default_tolerances_.state_tolerance[index], false))
+      {
+        abort = true;
+      }
+      // past the final point, check that we end up inside goal tolerance
+      if (
+        !before_last_point &&
+        !check_state_tolerance_per_joint(
+          state_error, index, default_tolerances_.goal_state_tolerance[index], false))
+      {
+        outside_goal_state_tolerance = true;
+      }
+    }
   }
 
+  // Write new joint angles to the robot
   // set values for next hardware write()
   if (has_position_command_interface_)
   {
@@ -769,15 +792,14 @@ controller_interface::return_type AdmittanceController::update()
   //         assign_interface_from_point(joint_command_interface_[3], state_desired.effort);
   //       }
 
-  // Write new joint angles to the robot
-  for (auto index = 0u; index < num_joints; ++index) {
-    if (has_position_command_interface_) {
-      joint_command_interface_[0][index].get().set_value(state_desired.positions[index]);
-    }
-    if (has_velocity_command_interface_) {
-      joint_command_interface_[1][index].get().set_value(state_desired.velocities[index]);
-    }
+  if(valid_trajectory_point) {
+    // handle action server feedback
+    perform_action_server_update(
+      before_last_point, abort, outside_goal_state_tolerance,
+      default_tolerances_.goal_time_tolerance, node_->now(), joint_names_, state_current,
+      state_desired, state_error, start_segment_itr);
   }
+
   // store command as state when hardware state has tracking offset
   // TODO: Should we be checking if open_loop_control_ around this assignment?
   last_commanded_state_ = state_desired;
