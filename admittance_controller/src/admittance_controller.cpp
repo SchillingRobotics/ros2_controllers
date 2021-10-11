@@ -688,11 +688,11 @@ controller_interface::return_type AdmittanceController::update()
   // TODO: Use pre-allocated joint_deltas_ vector 
   std::array<double, 6> joint_deltas;
 
-  // This results in wild motion for some reason
+  // Here we have no servo or trajectory command, maintain current position
   if (!valid_trajectory_point) {
     state_desired = last_commanded_state_;
-    state_desired.velocities.resize(num_joints, 0.0);
-    state_desired.accelerations.resize(num_joints, 0.0);
+    state_desired.velocities.assign(num_joints, 0.0);
+    state_desired.accelerations.assign(num_joints, 0.0);
   }
 
   // If there are no positions, expect velocities
@@ -721,13 +721,6 @@ controller_interface::return_type AdmittanceController::update()
   if (joint_limiter_)
   {
     joint_limiter_->enforce(state_current, state_desired, duration_since_last_call);
-  }
-
-  // Temporary, putting this here to prevent wild motion
-  if (!valid_trajectory_point) {
-    state_desired = last_commanded_state_;
-    state_desired.velocities.resize(num_joints, 0.0);
-    state_desired.accelerations.resize(num_joints, 0.0);
   }
 
    // Compute state_error
