@@ -117,10 +117,10 @@ controller_interface::return_type AdmittanceRule::update(
     get_pose_of_control_frame_in_base_frame(current_pose_ik_base_frame_);
 
     // Convert all data to arrays for simpler calculation
-    transform_to_control_frame(reference_pose_ik_base_frame_, current_pose_control_frame_);
-    convert_message_to_array(current_pose_control_frame_, reference_pose_arr_);
-    transform_to_control_frame(current_pose_ik_base_frame_, reference_pose_control_frame_);
-    convert_message_to_array(reference_pose_control_frame_, current_pose_arr_);
+    transform_to_control_frame(reference_pose_ik_base_frame_, reference_pose_control_frame_);
+    convert_message_to_array(reference_pose_control_frame_, reference_pose_arr_);
+    transform_to_control_frame(current_pose_ik_base_frame_, current_pose_control_frame_);
+    convert_message_to_array(current_pose_control_frame_, current_pose_arr_);
 
     for (auto i = 0u; i < 6; ++i) {
       pose_error[i] = current_pose_arr_[i] - reference_pose_arr_[i];

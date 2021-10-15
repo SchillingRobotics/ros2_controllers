@@ -503,20 +503,17 @@ CallbackReturn AdmittanceController::on_activate(const rclcpp_lifecycle::State &
   traj_point_active_ptr_ = &traj_external_point_ptr_;
 
   // Initialize current state storage if hardware state has tracking offset
-  resize_joint_trajectory_point(
-    last_commanded_state_, joint_names_.size(), has_velocity_state_interface_,
-    has_acceleration_state_interface_);
-  read_state_from_hardware(last_commanded_state_);
-  // Handle restart of controller by reading last_commanded_state_ from commands is
-  // those are not nan
-  trajectory_msgs::msg::JointTrajectoryPoint state;
-  resize_joint_trajectory_point(
-    state, joint_names_.size(), has_velocity_state_interface_, has_acceleration_state_interface_);
 
-  if (read_state_from_command_interfaces(state))
-  {
-    last_commanded_state_ = state;
-  }
+  // Already sized this in configure
+  // resize_joint_trajectory_point(
+  //   last_commanded_state_, joint_names_.size(), has_velocity_command_interface_,
+  //   has_acceleration_command_interface_);
+  read_state_from_hardware(last_commanded_state_);
+  // Handle restart of controller by reading last_commanded_state_ from commands if not nan
+  read_state_from_command_interfaces(last_commanded_state_);
+  last_setpoint_state_ = last_commanded_state_;
+  last_setpoint_state_.velocities.assign(num_joints, 0.0);
+  last_setpoint_state_.accelerations.assign(num_joints, 0.0);
 
   // Initialize interface of the FTS semantic semantic component
   force_torque_sensor_->assign_loaned_state_interfaces(state_interfaces_);
@@ -525,13 +522,11 @@ CallbackReturn AdmittanceController::on_activate(const rclcpp_lifecycle::State &
   admittance_->reset();
   previous_time_ = get_node()->now();
 
-  read_state_from_hardware(last_commanded_state_);
+  // Using last commanded state, and not last commanded set point, because we may have been using a different controller and this could then cause unexpected movement
   if (joint_limiter_)
   {
     joint_limiter_->configure(last_commanded_state_);
   }
-  // Handle restart of controller by reading last_commanded_state_ from commands if not nan
-  read_state_from_command_interfaces(last_commanded_state_);
 
   // Set initial command values - initialize all to simplify update
   std::shared_ptr<ControllerCommandWrenchMsg> msg_wrench = std::make_shared<ControllerCommandWrenchMsg>();
@@ -669,7 +664,7 @@ controller_interface::return_type AdmittanceController::update()
   joint_trajectory_controller::TrajectoryPointConstIter start_segment_itr, end_segment_itr;
 
   // currently carrying out a trajectory
-  if (have_trajectory())
+  if (have_active_trajectory())
   {
     // if we will be sampling for the first time, prefix the trajectory with the current state
     set_point_before_trajectory_msg(
@@ -678,6 +673,7 @@ controller_interface::return_type AdmittanceController::update()
     // find segment for current timestamp
     // joint_trajectory_controller::TrajectoryPointConstIter start_segment_itr, end_segment_itr;
 
+    // Resets state_desired and may fill it
     valid_trajectory_point = sample_trajectory(
       node_->now(), state_desired, start_segment_itr, end_segment_itr);
 
@@ -690,30 +686,35 @@ controller_interface::return_type AdmittanceController::update()
 
   // Here we have no servo or trajectory command, maintain current position
   if (!valid_trajectory_point) {
-    state_desired = last_commanded_state_;
-    state_desired.velocities.assign(num_joints, 0.0);
-    state_desired.accelerations.assign(num_joints, 0.0);
+    state_desired = last_setpoint_state_;
   }
 
   // If there are no positions, expect velocities
   // TODO(destogl): add error handling
-  // if (state_desired.positions.empty()) {
-  //   for (auto index = 0u; index < num_joints; ++index) {
-  //     joint_deltas.at(index) = state_desired.velocities[index] * duration_since_last_call.seconds();
-  //   }
-  // } else {
-  //   for (auto index = 0u; index < num_joints; ++index) {
-  //     // TODO(destogl): ATTENTION: This does not work properly, deltas are getting neutralized and robot is not moving on external forces
-  //     // TODO(anyone): Is here OK to use shortest_angular_distance?
-  //     joint_deltas.at(index) = angles::shortest_angular_distance(state_current.positions[index], state_desired.positions[index]);
-  //   }
-  // }
-  // Always use velocities since positions aren't working
-  for (auto index = 0u; index < num_joints; ++index) {
-    joint_deltas.at(index) = state_desired.velocities[index] * duration_since_last_call.seconds();
+  if (state_desired.positions.empty()) {
+    // Servo twist message
+    for (auto index = 0u; index < num_joints; ++index) {
+      joint_deltas.at(index) = state_desired.velocities[index] * duration_since_last_call.seconds();
+    }
+  } else {
+    for (auto index = 0u; index < num_joints; ++index) {
+      // TODO(destogl): ATTENTION: This does not work properly, deltas are getting neutralized and robot is not moving on external forces
+      // TODO(anyone): Is here OK to use shortest_angular_distance?
+      joint_deltas.at(index) = angles::shortest_angular_distance(state_current.positions[index], state_desired.positions[index]);
+    }
   }
 
+  // // Always use velocities since positions aren't working
+  // for (auto index = 0u; index < num_joints; ++index) {
+  //   joint_deltas.at(index) = state_desired.velocities[index] * duration_since_last_call.seconds();
+  // }
+
   pre_admittance_point.points.push_back(state_desired);
+  if (valid_trajectory_point) {
+    last_setpoint_state_ = state_desired;
+    last_setpoint_state_.velocities.assign(num_joints, 0.0);
+    last_setpoint_state_.accelerations.assign(num_joints, 0.0);
+  }
 
   admittance_->update(state_current, ft_values, joint_deltas, duration_since_last_call, state_desired);
 

@@ -95,7 +95,10 @@ protected:
   /// This is useful when robot is not exactly following the commanded trajectory.
   bool hardware_state_has_offset_;
   bool open_loop_control_ = false;
+  // The latest command written to the command interfaces
   trajectory_msgs::msg::JointTrajectoryPoint last_commanded_state_;
+  // The latest desired state prior to applying admittance rule and joint limiter
+  trajectory_msgs::msg::JointTrajectoryPoint last_setpoint_state_;
 
   // joint limiter
   using JointLimiter = joint_limits::JointLimiterInterface<joint_limits::JointLimits>;

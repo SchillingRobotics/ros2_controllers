@@ -97,6 +97,11 @@ protected:
     return traj_point_active_ptr_ && (*traj_point_active_ptr_)->has_trajectory_msg();
   }
 
+  bool have_active_trajectory()
+  {
+    return traj_point_active_ptr_ && (*traj_point_active_ptr_)->has_trajectory_msg() && *rt_active_goal_.readFromRT();
+  }
+
   void set_point_before_trajectory_msg(
     bool open_loop_control, rclcpp::Time now,
     trajectory_msgs::msg::JointTrajectoryPoint state_current,
@@ -592,7 +597,11 @@ protected:
   rclcpp::Subscription<trajectory_msgs::msg::JointTrajectory>::SharedPtr joint_command_subscriber_ =
     nullptr;
 
+  // Trajectory is a wrapper around a std::shared_ptr<trajectory_msgs::msg::JointTrajectory>
+  // Pointer to shared_ptr to a shared_ptr<trajectory_msgs::msg::JointTrajectory>
   std::shared_ptr<Trajectory> * traj_point_active_ptr_ = nullptr;
+  // Shared ptr to a shared_ptr<trajectory_msgs::msg::JointTrajectory>
+  // Populated using RealtimeBuffer<shared_ptr<trajectory_msgs::msg::JointTrajectory>> traj_msg_external_point_ptr_
   std::shared_ptr<Trajectory> traj_external_point_ptr_ = nullptr;
   std::shared_ptr<Trajectory> traj_home_point_ptr_ = nullptr;
   std::shared_ptr<trajectory_msgs::msg::JointTrajectory> traj_msg_home_ptr_ = nullptr;
