@@ -533,6 +533,8 @@ CallbackReturn AdmittanceController::on_activate(const rclcpp_lifecycle::State &
   // Handle restart of controller by reading last_commanded_state_ from commands if not nan
   read_state_from_command_interfaces(last_commanded_state_);
 
+  prev_trajectory_point_ = last_commanded_state_;
+
   // Set initial command values - initialize all to simplify update
   std::shared_ptr<ControllerCommandWrenchMsg> msg_wrench = std::make_shared<ControllerCommandWrenchMsg>();
   msg_wrench->header.frame_id = admittance_->control_frame_;
@@ -673,7 +675,7 @@ controller_interface::return_type AdmittanceController::update()
   {
     // if we will be sampling for the first time, prefix the trajectory with the current state
     set_point_before_trajectory_msg(
-      open_loop_control_, node_->now(), state_current, last_commanded_state_);
+      open_loop_control_, node_->now(), state_current, prev_trajectory_point_);
 
     // find segment for current timestamp
     // joint_trajectory_controller::TrajectoryPointConstIter start_segment_itr, end_segment_itr;
@@ -682,6 +684,8 @@ controller_interface::return_type AdmittanceController::update()
       node_->now(), state_desired, start_segment_itr, end_segment_itr);
 
     before_last_point = is_before_last_point(end_segment_itr);
+
+    prev_trajectory_point_ = state_desired;
   }
 
   auto duration_since_last_call = get_node()->now() - previous_time_;

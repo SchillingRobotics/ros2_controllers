@@ -95,6 +95,7 @@ protected:
   /// This is useful when robot is not exactly following the commanded trajectory.
   bool hardware_state_has_offset_;
   bool open_loop_control_ = false;
+  trajectory_msgs::msg::JointTrajectoryPoint prev_trajectory_point_;
   trajectory_msgs::msg::JointTrajectoryPoint last_commanded_state_;
 
   // joint limiter
