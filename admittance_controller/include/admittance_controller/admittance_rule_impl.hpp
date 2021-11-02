@@ -282,6 +282,24 @@ void AdmittanceRule::process_wrench_measurements(
   measured_wrench_.wrench = measured_wrench;
   filter_chain_->update(measured_wrench_, measured_wrench_filtered_);
 
+  // compute ee frame
+  auto transform = tf_buffer_->lookupTransform("force_sensor", "tool0", rclcpp::Time());
+  // RCLCPP_INFO_STREAM(rclcpp::get_logger("AdmittanceRule"), "Got transform from tool0 to force_sensor:"<< transform.transform.translation.x
+  //   << ", " << transform.transform.translation.y << ", " << transform.transform.translation.z);
+
+  tf2::Vector3 measured_moments{ measured_wrench_filtered_.wrench.torque.x,measured_wrench_filtered_.wrench.torque.y,measured_wrench_filtered_.wrench.torque.z };
+
+  tf2::Vector3 measured_forces{ measured_wrench_filtered_.wrench.force.x,measured_wrench_filtered_.wrench.force.y,measured_wrench_filtered_.wrench.force.z };
+  tf2::Vector3 displacement{ transform.transform.translation.x,transform.transform.translation.y, transform.transform.translation.z };
+
+  auto tool_moments = measured_moments + tf2::tf2Cross(displacement, measured_forces);
+
+  measured_wrench_filtered_.header.frame_id = "tool0";
+  measured_wrench_filtered_.wrench.torque.x = tool_moments.x();
+  measured_wrench_filtered_.wrench.torque.y = tool_moments.y();
+  measured_wrench_filtered_.wrench.torque.z = tool_moments.z();
+  //RCLCPP_INFO_STREAM(rclcpp::get_logger("AdmittanceRule"), "tool0 moments: " << tool_moments.x() << ", " << tool_moments.y() << ", " << tool_moments.z());
+
   // TODO(destogl): rename this variables...
   transform_to_ik_base_frame(measured_wrench_filtered_, measured_wrench_ik_base_frame_);
   transform_to_control_frame(measured_wrench_filtered_, measured_wrench_ik_base_frame_);
