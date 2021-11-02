@@ -283,7 +283,8 @@ void AdmittanceRule::process_wrench_measurements(
   filter_chain_->update(measured_wrench_, measured_wrench_filtered_);
 
   // compute ee frame
-  auto transform = tf_buffer_->lookupTransform("force_sensor", "tool0", rclcpp::Time());
+  // auto transform = tf_buffer_->lookupTransform("force_sensor", "tool0", rclcpp::Time());
+  auto transform = tf_buffer_->lookupTransform("tool0", "force_sensor", rclcpp::Time());
   // RCLCPP_INFO_STREAM(rclcpp::get_logger("AdmittanceRule"), "Got transform from tool0 to force_sensor:"<< transform.transform.translation.x
   //   << ", " << transform.transform.translation.y << ", " << transform.transform.translation.z);
 
@@ -294,7 +295,7 @@ void AdmittanceRule::process_wrench_measurements(
 
   auto tool_moments = measured_moments + tf2::tf2Cross(displacement, measured_forces);
 
-  measured_wrench_filtered_.header.frame_id = "tool0";
+  //measured_wrench_filtered_.header.frame_id = "tool0";
   measured_wrench_filtered_.wrench.torque.x = tool_moments.x();
   measured_wrench_filtered_.wrench.torque.y = tool_moments.y();
   measured_wrench_filtered_.wrench.torque.z = tool_moments.z();
