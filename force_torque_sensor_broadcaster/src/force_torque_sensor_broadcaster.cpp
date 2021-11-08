@@ -217,8 +217,8 @@ controller_interface::return_type ForceTorqueSensorBroadcaster::update() {
   wrench_filtered_.header.frame_id = wrench_raw_.header.frame_id;
   filter_chain_->update(wrench_raw_, wrench_filtered_);
 
-try{
-  auto transform = tf_buffer_->lookupTransform("tool0", "force_sensor", rclcpp::Time());
+  try{
+    auto transform = tf_buffer_->lookupTransform("tool_exchange_control_frame", "force_sensor", rclcpp::Time());
   // RCLCPP_INFO_STREAM(rclcpp::get_logger("AdmittanceRule"), "Got transform from tool0 to force_sensor:"<< transform.transform.translation.x
   //   << ", " << transform.transform.translation.y << ", " << transform.transform.translation.z);
 
@@ -229,7 +229,7 @@ try{
 
   auto tool_moments = measured_moments + tf2::tf2Cross(displacement, measured_forces);
 
-  wrench_filtered_.header.frame_id = "tool0";
+  wrench_filtered_.header.frame_id = "tool_exchange_control_frame";
   wrench_filtered_.wrench.torque.x = tool_moments.x();
   wrench_filtered_.wrench.torque.y = tool_moments.y();
   wrench_filtered_.wrench.torque.z = tool_moments.z();
