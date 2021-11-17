@@ -12,6 +12,7 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(backward_ros REQUIRED)
 find_package(controller_interface REQUIRED)
 find_package(filters REQUIRED)
 find_package(geometry_msgs REQUIRED)
