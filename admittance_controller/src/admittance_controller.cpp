@@ -685,7 +685,7 @@ controller_interface::return_type AdmittanceController::update()
 
     before_last_point = is_before_last_point(end_segment_itr);
 
-    prev_trajectory_point_ = state_desired;
+    if (valid_trajectory_point) prev_trajectory_point_ = state_desired;
   }
 
   auto duration_since_last_call = get_node()->now() - previous_time_;
