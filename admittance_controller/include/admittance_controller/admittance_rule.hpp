@@ -172,12 +172,13 @@ namespace admittance_controller
 class AdmittanceParameters : public controller_interface::ControllerParameters
 {
 public:
-  AdmittanceParameters() : controller_interface::ControllerParameters("", 7, 24, 4)
+  AdmittanceParameters() : controller_interface::ControllerParameters("", 7, 24, 5)
   {
     add_string_parameter("IK.base", false);
     add_string_parameter("IK.group_name", false);
     add_string_parameter("control_frame", true);
     add_string_parameter("sensor_frame", false);
+    add_string_parameter("filtered_wrench_frame", false);
 
     add_bool_parameter("open_loop_control", true);
 
@@ -294,6 +295,9 @@ public:
     RCUTILS_LOG_INFO_NAMED(logger_name_.c_str(), "Control frame: %s", control_frame_.c_str());
     sensor_frame_ = string_parameters_[3].second;
     RCUTILS_LOG_INFO_NAMED(logger_name_.c_str(), "Sensor frame: %s", sensor_frame_.c_str());
+    filtered_wrench_frame_ = string_parameters_[4].second;
+    RCUTILS_LOG_INFO_NAMED(
+      logger_name_.c_str(), "Filtered Wrench frame: %s", filtered_wrench_frame_.c_str());
 
     open_loop_control_ = bool_parameters_[0].second;
     RCUTILS_LOG_INFO_NAMED(
@@ -330,6 +334,8 @@ public:
   std::string sensor_frame_;
   // Depends on the scenario: usually base_link, tool or end-effector
   std::string control_frame_;
+  // for transforming filtered wrench frame to control frame: usually control frame
+  std::string filtered_wrench_frame_;
 
   bool open_loop_control_;
 
@@ -495,6 +501,60 @@ private:
         geometry_msgs::msg::TransformStamped transform =
           tf_buffer_->lookupTransform(frame, message_in.header.frame_id, tf2::TimePointZero);
         tf2::doTransform(message_in, message_out, transform);
+      }
+      catch (const tf2::TransformException & e)
+      {
+        RCLCPP_ERROR_SKIPFIRST_THROTTLE(
+          rclcpp::get_logger("AdmittanceRule"), *clock_, 5000, "%s", e.what());
+        return controller_interface::return_type::ERROR;
+      }
+    }
+    else
+    {
+      message_out = message_in;
+    }
+    return controller_interface::return_type::OK;
+  }
+
+  inline controller_interface::return_type transform_wrench_to_filtered_wrench_frame(
+    const geometry_msgs::msg::WrenchStamped & message_in,
+    geometry_msgs::msg::WrenchStamped & message_out)
+  {
+    if (message_in.header.frame_id != parameters_.filtered_wrench_frame_)
+    {
+      try
+      {
+        geometry_msgs::msg::TransformStamped transform = tf_buffer_->lookupTransform(
+          parameters_.filtered_wrench_frame_, message_in.header.frame_id, tf2::TimePointZero);
+        tf2::doTransform<geometry_msgs::msg::WrenchStamped>(message_in, message_out, transform);
+      }
+      catch (const tf2::TransformException & e)
+      {
+        RCLCPP_ERROR_SKIPFIRST_THROTTLE(
+          rclcpp::get_logger("AdmittanceRule"), *clock_, 5000, "%s", e.what());
+        return controller_interface::return_type::ERROR;
+      }
+    }
+    else
+    {
+      message_out = message_in;
+    }
+    return controller_interface::return_type::OK;
+  }
+
+  inline controller_interface::return_type transform_to_frame(
+    const geometry_msgs::msg::WrenchStamped & message_in,
+    geometry_msgs::msg::WrenchStamped & message_out, const std::string & frame)
+  {
+    if (frame != message_in.header.frame_id)
+    {
+      try
+      {
+        geometry_msgs::msg::TransformStamped transform =
+          tf_buffer_->lookupTransform(frame, message_in.header.frame_id, tf2::TimePointZero);
+        tf2::doTransform(message_in.wrench.force, message_out.wrench.force, transform);
+        tf2::doTransform(message_in.wrench.torque, message_out.wrench.torque, transform);
+        // tf2::doTransform(message_in, message_out, transform);
       }
       catch (const tf2::TransformException & e)
       {

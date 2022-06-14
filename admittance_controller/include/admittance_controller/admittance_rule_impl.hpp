@@ -282,6 +282,14 @@ void AdmittanceRule::process_wrench_measurements(
   measured_wrench_.wrench = measured_wrench;
   filter_chain_->update(measured_wrench_, measured_wrench_filtered_);
 
+  // control frame doesn't work so this is workaround to tansform measured net force to control frame
+  // to use in admittance calculations - this seems to work but is ultimately not the correct solution
+  auto measured_wrench_filtered_input_frame = measured_wrench_filtered_;
+  auto frame_id = measured_wrench_filtered_.header.frame_id;
+  transform_wrench_to_filtered_wrench_frame(
+    measured_wrench_filtered_input_frame, measured_wrench_filtered_);
+  measured_wrench_filtered_.header.frame_id = frame_id;  // retain frame id
+
   // TODO(destogl): rename this variables...
   transform_to_ik_base_frame(measured_wrench_filtered_, measured_wrench_ik_base_frame_);
   transform_to_control_frame(measured_wrench_filtered_, measured_wrench_ik_base_frame_);
