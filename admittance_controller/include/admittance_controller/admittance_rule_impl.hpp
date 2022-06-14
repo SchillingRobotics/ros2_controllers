@@ -282,23 +282,6 @@ void AdmittanceRule::process_wrench_measurements(
   measured_wrench_.wrench = measured_wrench;
   filter_chain_->update(measured_wrench_, measured_wrench_filtered_);
 
-  // project measured force to our desired control frame
-  auto transform = tf_buffer_->lookupTransform("tool_exchange_control_frame", "force_sensor", rclcpp::Time());
-
-  tf2::Vector3 measured_moments{ measured_wrench_filtered_.wrench.torque.x,measured_wrench_filtered_.wrench.torque.y,measured_wrench_filtered_.wrench.torque.z };
-
-  tf2::Vector3 measured_forces{ measured_wrench_filtered_.wrench.force.x,measured_wrench_filtered_.wrench.force.y,measured_wrench_filtered_.wrench.force.z };
-  tf2::Vector3 displacement{ transform.transform.translation.x,transform.transform.translation.y, transform.transform.translation.z };
-
-  auto tool_moments = measured_moments + tf2::tf2Cross(displacement, measured_forces);
-
-  // we can't do this without accounting for wrist rotation
-  //measured_wrench_filtered_.header.frame_id = "tool_exchange_control_frame";
-
-  measured_wrench_filtered_.wrench.torque.x = tool_moments.x();
-  measured_wrench_filtered_.wrench.torque.y = tool_moments.y();
-  measured_wrench_filtered_.wrench.torque.z = tool_moments.z();
- 
   // TODO(destogl): rename this variables...
   transform_to_ik_base_frame(measured_wrench_filtered_, measured_wrench_ik_base_frame_);
   transform_to_control_frame(measured_wrench_filtered_, measured_wrench_ik_base_frame_);
