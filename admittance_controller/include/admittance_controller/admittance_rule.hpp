@@ -516,32 +516,8 @@ private:
     return controller_interface::return_type::OK;
   }
 
-  inline controller_interface::return_type transform_wrench_to_filtered_wrench_frame(
-    const geometry_msgs::msg::WrenchStamped & message_in,
-    geometry_msgs::msg::WrenchStamped & message_out)
-  {
-    if (message_in.header.frame_id != parameters_.filtered_wrench_frame_)
-    {
-      try
-      {
-        geometry_msgs::msg::TransformStamped transform = tf_buffer_->lookupTransform(
-          parameters_.filtered_wrench_frame_, message_in.header.frame_id, tf2::TimePointZero);
-        tf2::doTransform<geometry_msgs::msg::WrenchStamped>(message_in, message_out, transform);
-      }
-      catch (const tf2::TransformException & e)
-      {
-        RCLCPP_ERROR_SKIPFIRST_THROTTLE(
-          rclcpp::get_logger("AdmittanceRule"), *clock_, 5000, "%s", e.what());
-        return controller_interface::return_type::ERROR;
-      }
-    }
-    else
-    {
-      message_out = message_in;
-    }
-    return controller_interface::return_type::OK;
-  }
-
+  // template specialization for wrench transform to use pre-geometry2 fix for wrench transforms
+  // (so wrench transforms behave as before which seems to work)
   inline controller_interface::return_type transform_to_frame(
     const geometry_msgs::msg::WrenchStamped & message_in,
     geometry_msgs::msg::WrenchStamped & message_out, const std::string & frame)
