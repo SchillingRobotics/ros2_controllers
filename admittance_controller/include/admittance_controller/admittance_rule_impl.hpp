@@ -282,13 +282,27 @@ void AdmittanceRule::process_wrench_measurements(
   measured_wrench_.wrench = measured_wrench;
   filter_chain_->update(measured_wrench_, measured_wrench_filtered_);
 
-  // control frame doesn't work so this is workaround to tansform measured net force to control frame
+  // project measured force to our desired control frame(but un-rotated)
+  // control frame doesn't work so this is workaround to tansform measured net force to unrotated control frame
   // to use in admittance calculations - this seems to work but is ultimately not the correct solution
-  auto measured_wrench_filtered_input_frame = measured_wrench_filtered_;
-  auto frame_id = measured_wrench_filtered_.header.frame_id;
-  transform_wrench_to_filtered_wrench_frame(
-    measured_wrench_filtered_input_frame, measured_wrench_filtered_);
-  measured_wrench_filtered_.header.frame_id = frame_id;  // retain frame id
+  auto transform = tf_buffer_->lookupTransform(
+    parameters_.filtered_wrench_frame_, measured_wrench_filtered_.header.frame_id, rclcpp::Time());
+
+  tf2::Vector3 measured_moments{
+    measured_wrench_filtered_.wrench.torque.x, measured_wrench_filtered_.wrench.torque.y,
+    measured_wrench_filtered_.wrench.torque.z};
+
+  tf2::Vector3 measured_forces{
+    measured_wrench_filtered_.wrench.force.x, measured_wrench_filtered_.wrench.force.y,
+    measured_wrench_filtered_.wrench.force.z};
+  tf2::Vector3 displacement{
+    transform.transform.translation.x, transform.transform.translation.y,
+    transform.transform.translation.z};
+
+  auto tool_moments = measured_moments + tf2::tf2Cross(displacement, measured_forces);
+  measured_wrench_filtered_.wrench.torque.x = tool_moments.x();
+  measured_wrench_filtered_.wrench.torque.y = tool_moments.y();
+  measured_wrench_filtered_.wrench.torque.z = tool_moments.z();
 
   // TODO(destogl): rename this variables...
   transform_to_ik_base_frame(measured_wrench_filtered_, measured_wrench_ik_base_frame_);
