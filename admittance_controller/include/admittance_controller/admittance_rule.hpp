@@ -172,7 +172,7 @@ namespace admittance_controller
 class AdmittanceParameters : public controller_interface::ControllerParameters
 {
 public:
-  AdmittanceParameters() : controller_interface::ControllerParameters(7, 24, 4)
+  AdmittanceParameters() : controller_interface::ControllerParameters("", 7, 24, 4)
   {
     add_string_parameter("IK.base", false);
     add_string_parameter("IK.group_name", false);
@@ -285,7 +285,7 @@ public:
     }
   }
 
-  void update() override
+  void update_storage() override
   {
     ik_base_frame_ = string_parameters_[0].second;
     RCUTILS_LOG_INFO_NAMED(
