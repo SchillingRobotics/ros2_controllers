@@ -47,75 +47,33 @@ AdmittanceController::AdmittanceController()
 
 CallbackReturn AdmittanceController::on_init()
 {
+
+  admittance_ = std::make_unique<admittance_controller::AdmittanceRule>();
+
   try {
     // TODO: use variables as parameters
-    auto_declare<std::vector<std::string>>("joints", std::vector<std::string>());
-    auto_declare<std::vector<std::string>>("command_interfaces", std::vector<std::string>());
-    auto_declare<std::vector<std::string>>("state_interfaces", std::vector<std::string>());
-    auto_declare<std::string>("ft_sensor_name", "");
-    auto_declare<bool>("use_joint_commands_as_input", false);
-    auto_declare<bool>("open_loop_control", false);
-    auto_declare<std::string>("joint_limiter_type", "joint_limits/SimpleJointLimiter");
-    auto_declare<double>("action_monitor_rate", 20.0);
+    get_node()->declare_parameter<std::vector<std::string>>("joints", std::vector<std::string>({}));
+    get_node()->declare_parameter<std::vector<std::string>>("command_interfaces", std::vector<std::string>({}));
+    get_node()->declare_parameter<std::vector<std::string>>("state_interfaces", std::vector<std::string>({}));
+    get_node()->declare_parameter<std::string>("ft_sensor_name", "");
+    get_node()->declare_parameter<bool>("use_joint_commands_as_input", false);
+    get_node()->declare_parameter<std::string>("joint_limiter_type", "joint_limits/SimpleJointLimiter");
+    get_node()->declare_parameter<double>("action_monitor_rate", 20.0);
 
-    auto_declare<std::string>("IK.base", "");
     // TODO(destogl): enable when IK-plugin support is added
-//     auto_declare<std::string>("IK.plugin", "");
-    auto_declare<std::string>("IK.group_name", "");
-
-    auto_declare<std::string>("control_frame", "");
-    auto_declare<std::string>("sensor_frame", "");
-
-    // TODO(destogl): enable when force/position control is implemented
-//     auto_declare<bool>("admitance.unified_mode", false);
-    auto_declare<bool>("admittance.selected_axes.x", false);
-    auto_declare<bool>("admittance.selected_axes.y", false);
-    auto_declare<bool>("admittance.selected_axes.z", false);
-    auto_declare<bool>("admittance.selected_axes.rx", false);
-    auto_declare<bool>("admittance.selected_axes.ry", false);
-    auto_declare<bool>("admittance.selected_axes.rz", false);
-
-    auto_declare<double>("admittance.mass.x", std::numeric_limits<double>::quiet_NaN());
-    auto_declare<double>("admittance.mass.y", std::numeric_limits<double>::quiet_NaN());
-    auto_declare<double>("admittance.mass.z", std::numeric_limits<double>::quiet_NaN());
-    auto_declare<double>("admittance.mass.rx", std::numeric_limits<double>::quiet_NaN());
-    auto_declare<double>("admittance.mass.ry", std::numeric_limits<double>::quiet_NaN());
-    auto_declare<double>("admittance.mass.rz", std::numeric_limits<double>::quiet_NaN());
-
-    auto_declare<double>("admittance.damping.x", std::numeric_limits<double>::quiet_NaN());
-    auto_declare<double>("admittance.damping.y", std::numeric_limits<double>::quiet_NaN());
-    auto_declare<double>("admittance.damping.z", std::numeric_limits<double>::quiet_NaN());
-    auto_declare<double>("admittance.damping.rx", std::numeric_limits<double>::quiet_NaN());
-    auto_declare<double>("admittance.damping.ry", std::numeric_limits<double>::quiet_NaN());
-    auto_declare<double>("admittance.damping.rz", std::numeric_limits<double>::quiet_NaN());
-
-    auto_declare<double>("admittance.damping_ratio.x", std::numeric_limits<double>::quiet_NaN());
-    auto_declare<double>("admittance.damping_ratio.y", std::numeric_limits<double>::quiet_NaN());
-    auto_declare<double>("admittance.damping_ratio.z", std::numeric_limits<double>::quiet_NaN());
-    auto_declare<double>("admittance.damping_ratio.rx", std::numeric_limits<double>::quiet_NaN());
-    auto_declare<double>("admittance.damping_ratio.ry", std::numeric_limits<double>::quiet_NaN());
-    auto_declare<double>("admittance.damping_ratio.rz", std::numeric_limits<double>::quiet_NaN());
-
-    auto_declare<double>("admittance.stiffness.x", std::numeric_limits<double>::quiet_NaN());
-    auto_declare<double>("admittance.stiffness.y", std::numeric_limits<double>::quiet_NaN());
-    auto_declare<double>("admittance.stiffness.z", std::numeric_limits<double>::quiet_NaN());
-    auto_declare<double>("admittance.stiffness.rx", std::numeric_limits<double>::quiet_NaN());
-    auto_declare<double>("admittance.stiffness.ry", std::numeric_limits<double>::quiet_NaN());
-    auto_declare<double>("admittance.stiffness.rz", std::numeric_limits<double>::quiet_NaN());
-
-    auto_declare<bool>("allow_partial_joints_goal", allow_partial_joints_goal_);
-    auto_declare<bool>("open_loop_control", open_loop_control_);
-    auto_declare<bool>(
+    // get_node()->declare_parameter<std::string>("IK.plugin", "");
+    get_node()->declare_parameter<bool>("allow_partial_joints_goal", allow_partial_joints_goal_);
+    get_node()->declare_parameter<bool>(
       "allow_integration_in_goal_trajectories", allow_integration_in_goal_trajectories_);
-    auto_declare<double>("constraints.stopped_velocity_tolerance", 0.01);
-    auto_declare<double>("constraints.goal_time", 0.0);
+    get_node()->declare_parameter<double>("constraints.stopped_velocity_tolerance", 0.01);
+    get_node()->declare_parameter<double>("constraints.goal_time", 0.0);
+    
+    admittance_->parameters_.declare_parameters(get_node());
 
   } catch (const std::exception & e) {
     fprintf(stderr, "Exception thrown during init stage with message: %s \n", e.what());
     return CallbackReturn::ERROR;
   }
-
-  admittance_ = std::make_unique<admittance_controller::AdmittanceRule>();
 
   return CallbackReturn::SUCCESS;
 }
@@ -150,91 +108,23 @@ CallbackReturn AdmittanceController::on_configure(
     return false; // TODO(destogl): how to check "if_empty" for bool?
   };
 
-  auto get_double_param_and_error_if_empty = [&](
-    double & parameter, const char * parameter_name) {
-    parameter = get_node()->get_parameter(parameter_name).get_value<double>();
-    if (std::isnan(parameter)) {
-      RCLCPP_ERROR(get_node()->get_logger(), "'%s' parameter was not set", parameter_name);
-      return true;
-    }
-    return false;
-  };
-
-  auto get_double_params_and_error_if_both_empty_or_set = [&](
-    double & parameter, const char * parameter_name,
-    double & parameter2, const char * parameter_name2) {
-    parameter = get_node()->get_parameter(parameter_name).get_value<double>();
-    parameter2 = get_node()->get_parameter(parameter_name2).get_value<double>();
-    if (std::isnan(parameter) == std::isnan(parameter2)) {
-      RCLCPP_ERROR(get_node()->get_logger(), "'%s' and '%s' parameters were both '%s'set",
-                   parameter_name, parameter_name2, (std::isnan(parameter) ? "not " : ""));
-      return true;
-    }
-    return false;
-    };
-
   if (
     get_string_array_param_and_error_if_empty(joint_names_, "joints") ||
     get_string_array_param_and_error_if_empty(command_interface_types_, "command_interfaces") ||
     get_string_array_param_and_error_if_empty(state_interface_types_, "state_interfaces") ||
     get_string_param_and_error_if_empty(ft_sensor_name_, "ft_sensor_name") ||
     get_bool_param_and_error_if_empty(use_joint_commands_as_input_, "use_joint_commands_as_input") ||
-    get_bool_param_and_error_if_empty(admittance_->open_loop_control_, "open_loop_control") ||
     get_string_param_and_error_if_empty(joint_limiter_type_, "joint_limiter_type") ||
-    get_string_param_and_error_if_empty(admittance_->ik_base_frame_, "IK.base") ||
-    get_string_param_and_error_if_empty(admittance_->ik_group_name_, "IK.group_name") ||
-    get_string_param_and_error_if_empty(admittance_->control_frame_, "control_frame") ||
-    get_string_param_and_error_if_empty(admittance_->sensor_frame_, "sensor_frame") ||
 
-    get_bool_param_and_error_if_empty(admittance_->selected_axes_[0], "admittance.selected_axes.x") ||
-    get_bool_param_and_error_if_empty(admittance_->selected_axes_[1], "admittance.selected_axes.y") ||
-    get_bool_param_and_error_if_empty(admittance_->selected_axes_[2], "admittance.selected_axes.z") ||
-    get_bool_param_and_error_if_empty(admittance_->selected_axes_[3], "admittance.selected_axes.rx") ||
-    get_bool_param_and_error_if_empty(admittance_->selected_axes_[4], "admittance.selected_axes.ry") ||
-    get_bool_param_and_error_if_empty(admittance_->selected_axes_[5], "admittance.selected_axes.rz") ||
-
-    get_double_param_and_error_if_empty(admittance_->mass_[0], "admittance.mass.x") ||
-    get_double_param_and_error_if_empty(admittance_->mass_[1], "admittance.mass.y") ||
-    get_double_param_and_error_if_empty(admittance_->mass_[2], "admittance.mass.z") ||
-    get_double_param_and_error_if_empty(admittance_->mass_[3], "admittance.mass.rx") ||
-    get_double_param_and_error_if_empty(admittance_->mass_[4], "admittance.mass.ry") ||
-    get_double_param_and_error_if_empty(admittance_->mass_[5], "admittance.mass.rz") ||
-
-    get_double_params_and_error_if_both_empty_or_set(
-      admittance_->damping_[0], "admittance.damping.x",
-      admittance_->damping_ratio_[0], "admittance.damping_ratio.x") ||
-    get_double_params_and_error_if_both_empty_or_set(
-      admittance_->damping_[1], "admittance.damping.y",
-      admittance_->damping_ratio_[1], "admittance.damping_ratio.y") ||
-    get_double_params_and_error_if_both_empty_or_set(
-      admittance_->damping_[2], "admittance.damping.z",
-      admittance_->damping_ratio_[2], "admittance.damping_ratio.z") ||
-    get_double_params_and_error_if_both_empty_or_set(
-      admittance_->damping_[3], "admittance.damping.rx",
-      admittance_->damping_ratio_[3], "admittance.damping_ratio.rx") ||
-    get_double_params_and_error_if_both_empty_or_set(
-      admittance_->damping_[4], "admittance.damping.ry",
-      admittance_->damping_ratio_[4], "admittance.damping_ratio.ry") ||
-    get_double_params_and_error_if_both_empty_or_set(
-      admittance_->damping_[5], "admittance.damping.rz",
-      admittance_->damping_ratio_[5], "admittance.damping_ratio.rz") ||
-
-    get_double_param_and_error_if_empty(admittance_->stiffness_[0], "admittance.stiffness.x") ||
-    get_double_param_and_error_if_empty(admittance_->stiffness_[1], "admittance.stiffness.y") ||
-    get_double_param_and_error_if_empty(admittance_->stiffness_[2], "admittance.stiffness.z") ||
-    get_double_param_and_error_if_empty(admittance_->stiffness_[3], "admittance.stiffness.rx") ||
-    get_double_param_and_error_if_empty(admittance_->stiffness_[4], "admittance.stiffness.ry") ||
-    get_double_param_and_error_if_empty(admittance_->stiffness_[5], "admittance.stiffness.rz")
+    !admittance_->parameters_.get_parameters(get_node())
     )
   {
+    RCLCPP_ERROR(get_node()->get_logger(), "Error happened during reading parameters");
     return CallbackReturn::ERROR;
   }
 
   // Allocate vector
   joint_deltas_.resize(joint_names_.size());
-
-  // Convert the damping ratio (if given) to mass/spring/damper representation
-  admittance_->convert_damping_ratio_to_damping();
 
   try {
     admittance_->filter_chain_ =
@@ -385,9 +275,6 @@ CallbackReturn AdmittanceController::on_configure(
   state_publisher_->msg_.error_joint_state.positions.resize(num_joints, 0.0);
   state_publisher_->unlock();
 
-  // Configure AdmittanceRule
-  admittance_->configure(get_node());
-
   last_commanded_state_.positions.resize(num_joints);
   last_commanded_state_.velocities.resize(num_joints, 0.0);
   last_commanded_state_.accelerations.resize(num_joints, 0.0);
@@ -406,8 +293,25 @@ CallbackReturn AdmittanceController::on_configure(
     RCLCPP_INFO(get_node()->get_logger(), "Goals with partial set of joints are allowed");
   }
 
-  const double action_monitor_rate =
-    node_->get_parameter("action_monitor_rate").get_value<double>();
+
+  // Configure AdmittanceRule
+  admittance_->configure(get_node());
+
+  // Add callback to dynamically update parameters
+  on_set_callback_handle_ = get_node()->add_on_set_parameters_callback(
+    [this](const std::vector<rclcpp::Parameter> & parameters) {
+
+      return admittance_->parameters_.set_parameter_callback(parameters);
+    });
+
+  // HACK: This is workaround because it seems that updating parameters only in `on_activate` does
+  // not work properly
+  if (!admittance_->parameters_.check_if_parameters_are_valid()) {
+    RCLCPP_WARN(get_node()->get_logger(),
+                "Parameters are not valid and therefore will not be udpated");
+  } else {
+    admittance_->parameters_.update();
+  }
 
   RCLCPP_INFO(get_node()->get_logger(), "configure successful");
   return CallbackReturn::SUCCESS;
@@ -451,6 +355,14 @@ const
 CallbackReturn AdmittanceController::on_activate(const rclcpp_lifecycle::State & /*previous_state*/)
 {
   const auto num_joints = joint_names_.size();
+
+  // Update dynamic parameters before controller is started
+  if (!admittance_->parameters_.check_if_parameters_are_valid()) {
+    RCLCPP_WARN(get_node()->get_logger(),
+                "Parameters are not valid and therefore will not be udpated");
+  } else {
+    admittance_->parameters_.update();
+  }
 
   // order all joints in the storage
   for (const auto & interface : command_interface_types_) {
@@ -537,7 +449,7 @@ CallbackReturn AdmittanceController::on_activate(const rclcpp_lifecycle::State &
 
   // Set initial command values - initialize all to simplify update
   std::shared_ptr<ControllerCommandWrenchMsg> msg_wrench = std::make_shared<ControllerCommandWrenchMsg>();
-  msg_wrench->header.frame_id = admittance_->control_frame_;
+  msg_wrench->header.frame_id = admittance_->parameters_.control_frame_;
   input_wrench_command_.writeFromNonRT(msg_wrench);
 
   std::shared_ptr<ControllerCommandJointMsg> msg_joint = std::make_shared<ControllerCommandJointMsg>();
@@ -556,13 +468,13 @@ CallbackReturn AdmittanceController::on_activate(const rclcpp_lifecycle::State &
   input_joint_command_.writeFromNonRT(msg_joint);
 
   std::shared_ptr<ControllerCommandPoseMsg> msg_pose = std::make_shared<ControllerCommandPoseMsg>();
-  msg_pose->header.frame_id = admittance_->control_frame_;
+  msg_pose->header.frame_id = admittance_->parameters_.control_frame_;
   if (admittance_->get_pose_of_control_frame_in_base_frame(*msg_pose) !=
       controller_interface::return_type::OK)
   {
     RCLCPP_ERROR(node_->get_logger(),
                  "Can not find transform from '%s' to '%s' needed in the update loop",
-                 admittance_->ik_base_frame_.c_str(), admittance_->control_frame_.c_str());
+                 admittance_->parameters_.ik_base_frame_.c_str(), admittance_->parameters_.control_frame_.c_str());
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
   }
   input_pose_command_.writeFromNonRT(msg_pose);
@@ -641,7 +553,7 @@ controller_interface::return_type AdmittanceController::update()
   state_current.time_from_start.set__sec(0);
   read_state_from_hardware(state_current);
 
-  if (admittance_->open_loop_control_) {
+  if (admittance_->parameters_.open_loop_control_) {
     // TODO(destogl): This may not work in every case.
     // Please add checking which states are available and which not!
     state_current = last_commanded_state_;

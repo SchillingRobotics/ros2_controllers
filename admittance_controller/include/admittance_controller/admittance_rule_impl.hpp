@@ -38,27 +38,27 @@ controller_interface::return_type AdmittanceRule::configure(rclcpp::Node::Shared
   tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
   // Initialize variables used in the update loop
-  measured_wrench_.header.frame_id = sensor_frame_;
+  measured_wrench_.header.frame_id = parameters_.sensor_frame_;
 
   // The variables represent transformation within the same frame
-  relative_admittance_pose_ik_base_frame_.header.frame_id = ik_base_frame_;
-  relative_admittance_pose_ik_base_frame_.child_frame_id = ik_base_frame_;
-  relative_admittance_pose_control_frame_.header.frame_id = control_frame_;
-  relative_admittance_pose_control_frame_.child_frame_id = control_frame_;
+  relative_admittance_pose_ik_base_frame_.header.frame_id = parameters_.ik_base_frame_;
+  relative_admittance_pose_ik_base_frame_.child_frame_id = parameters_.ik_base_frame_;
+  relative_admittance_pose_control_frame_.header.frame_id = parameters_.control_frame_;
+  relative_admittance_pose_control_frame_.child_frame_id = parameters_.control_frame_;
 
   // The variables represent transformation within the same frame
-  admittance_velocity_ik_base_frame_.header.frame_id = ik_base_frame_;
-  admittance_velocity_ik_base_frame_.child_frame_id = ik_base_frame_;
-  admittance_velocity_control_frame_.header.frame_id = control_frame_;
-  admittance_velocity_control_frame_.child_frame_id = control_frame_;
+  admittance_velocity_ik_base_frame_.header.frame_id = parameters_.ik_base_frame_;
+  admittance_velocity_ik_base_frame_.child_frame_id = parameters_.ik_base_frame_;
+  admittance_velocity_control_frame_.header.frame_id = parameters_.control_frame_;
+  admittance_velocity_control_frame_.child_frame_id = parameters_.control_frame_;
 
-  sum_of_admittance_displacements_.header.frame_id = ik_base_frame_;
+  sum_of_admittance_displacements_.header.frame_id = parameters_.ik_base_frame_;
 
   reference_joint_deltas_vec_.reserve(6);
   reference_deltas_vec_ik_base_.reserve(6);
   // The variables represent transformation within the same frame
-  reference_deltas_ik_base_.header.frame_id = ik_base_frame_;
-  reference_deltas_ik_base_.child_frame_id = ik_base_frame_;
+  reference_deltas_ik_base_.header.frame_id = parameters_.ik_base_frame_;
+  reference_deltas_ik_base_.child_frame_id = parameters_.ik_base_frame_;
 
   identity_transform_.transform.rotation.w = 1;
 
@@ -70,7 +70,7 @@ controller_interface::return_type AdmittanceRule::configure(rclcpp::Node::Shared
   admittance_rule_calculated_values_.effort.resize(6, 0.0);
 
   // Initialize IK
-  ik_ = std::make_shared<MoveItKinematics>(node, ik_group_name_);
+  ik_ = std::make_shared<MoveItKinematics>(node, parameters_.ik_group_name_);
 
   return controller_interface::return_type::OK;
 }
@@ -88,7 +88,7 @@ controller_interface::return_type AdmittanceRule::reset()
 
   // "Open-loop" controller uses old desired pose as current pose: current_pose(K) = desired_pose(K-1)
   // Therefore desired pose has to be set before calling *update*-method
-  if (open_loop_control_) {
+  if (parameters_.open_loop_control_) {
     get_pose_of_control_frame_in_base_frame(admittance_pose_ik_base_frame_);
     convert_message_to_array(admittance_pose_ik_base_frame_, admittance_pose_ik_base_frame_arr_);
   }
@@ -110,10 +110,10 @@ controller_interface::return_type AdmittanceRule::update(
 
   std::array<double, 6> pose_error;
   geometry_msgs::msg::TransformStamped pose_error_pose;
-  pose_error_pose.header.frame_id = ik_base_frame_;
-  pose_error_pose.child_frame_id = control_frame_;
+  pose_error_pose.header.frame_id = parameters_.ik_base_frame_;
+  pose_error_pose.child_frame_id = parameters_.control_frame_;
 
-  if (!open_loop_control_) {
+  if (!parameters_.open_loop_control_) {
     get_pose_of_control_frame_in_base_frame(current_pose_ik_base_frame_);
 
     // Convert all data to arrays for simpler calculation
@@ -191,7 +191,7 @@ controller_interface::return_type AdmittanceRule::update(
 
   // Get feed-forward cartesian deltas in the ik_base frame.
   // Since ik_base is MoveIt's working frame, the transform is identity.
-  identity_transform_.header.frame_id = ik_base_frame_;
+  identity_transform_.header.frame_id = parameters_.ik_base_frame_;
   ik_->update_robot_state(current_joint_state);
   if (!ik_->convert_joint_deltas_to_cartesian_deltas(
       reference_joint_deltas_vec_, identity_transform_, reference_deltas_vec_ik_base_))
@@ -260,7 +260,7 @@ controller_interface::return_type AdmittanceRule::get_controller_state(
 controller_interface::return_type AdmittanceRule::get_pose_of_control_frame_in_base_frame(geometry_msgs::msg::PoseStamped & pose)
 {
   try {
-    auto transform = tf_buffer_->lookupTransform(ik_base_frame_, control_frame_, tf2::TimePointZero);
+    auto transform = tf_buffer_->lookupTransform(parameters_.ik_base_frame_, parameters_.control_frame_, tf2::TimePointZero);
 
     pose.header = transform.header;
     pose.pose.position.x = transform.transform.translation.x;
@@ -282,23 +282,28 @@ void AdmittanceRule::process_wrench_measurements(
   measured_wrench_.wrench = measured_wrench;
   filter_chain_->update(measured_wrench_, measured_wrench_filtered_);
 
-  // project measured force to our desired control frame
-  auto transform = tf_buffer_->lookupTransform("tool_exchange_control_frame", "force_sensor", rclcpp::Time());
+  // project measured force to our desired control frame(but un-rotated)
+  // control frame doesn't work so this is workaround to tansform measured net force to unrotated control frame
+  // to use in admittance calculations - this seems to work but is ultimately not the correct solution
+  auto transform = tf_buffer_->lookupTransform(
+    parameters_.filtered_wrench_frame_, measured_wrench_filtered_.header.frame_id, rclcpp::Time());
 
-  tf2::Vector3 measured_moments{ measured_wrench_filtered_.wrench.torque.x,measured_wrench_filtered_.wrench.torque.y,measured_wrench_filtered_.wrench.torque.z };
+  tf2::Vector3 measured_moments{
+    measured_wrench_filtered_.wrench.torque.x, measured_wrench_filtered_.wrench.torque.y,
+    measured_wrench_filtered_.wrench.torque.z};
 
-  tf2::Vector3 measured_forces{ measured_wrench_filtered_.wrench.force.x,measured_wrench_filtered_.wrench.force.y,measured_wrench_filtered_.wrench.force.z };
-  tf2::Vector3 displacement{ transform.transform.translation.x,transform.transform.translation.y, transform.transform.translation.z };
+  tf2::Vector3 measured_forces{
+    measured_wrench_filtered_.wrench.force.x, measured_wrench_filtered_.wrench.force.y,
+    measured_wrench_filtered_.wrench.force.z};
+  tf2::Vector3 displacement{
+    transform.transform.translation.x, transform.transform.translation.y,
+    transform.transform.translation.z};
 
   auto tool_moments = measured_moments + tf2::tf2Cross(displacement, measured_forces);
-
-  // we can't do this without accounting for wrist rotation
-  //measured_wrench_filtered_.header.frame_id = "tool_exchange_control_frame";
-
   measured_wrench_filtered_.wrench.torque.x = tool_moments.x();
   measured_wrench_filtered_.wrench.torque.y = tool_moments.y();
   measured_wrench_filtered_.wrench.torque.z = tool_moments.z();
- 
+
   // TODO(destogl): rename this variables...
   transform_to_ik_base_frame(measured_wrench_filtered_, measured_wrench_ik_base_frame_);
   transform_to_control_frame(measured_wrench_filtered_, measured_wrench_ik_base_frame_);
@@ -330,11 +335,11 @@ void AdmittanceRule::calculate_admittance_rule(
 {
   // Compute admittance control law: F = M*a + D*v + S*(x - x_d)
   for (auto i = 0u; i < 6; ++i) {
-    if (selected_axes_[i]) {
+    if (parameters_.selected_axes_[i]) {
       // TODO(destogl): check if velocity is measured from hardware
-      const double admittance_acceleration = (1 / mass_[i]) * (measured_wrench[i] -
-                                             damping_[i] * admittance_velocity_arr_[i] -
-                                             stiffness_[i] * pose_error[i]);
+      const double admittance_acceleration = (1 / parameters_.mass_[i]) * (measured_wrench[i] -
+                                                   parameters_.damping_[i] * admittance_velocity_arr_[i] -
+                                                   parameters_.stiffness_[i] * pose_error[i]);
 
       admittance_velocity_arr_[i] += admittance_acceleration * period.seconds();
 
@@ -361,7 +366,7 @@ controller_interface::return_type AdmittanceRule::calculate_desired_joint_state(
 )
 {
   // Since ik_base is MoveIt's working frame, the transform is identity.
-  identity_transform_.header.frame_id = ik_base_frame_;
+  identity_transform_.header.frame_id = parameters_.ik_base_frame_;
 
   // Use Jacobian-based IK
   std::vector<double> relative_admittance_pose_vec(relative_pose.begin(), relative_pose.end());
